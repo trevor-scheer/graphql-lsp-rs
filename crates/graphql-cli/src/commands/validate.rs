@@ -175,7 +175,7 @@ pub async fn run(
 
                             match format {
                                 OutputFormat::Human => {
-                                    // Format: file_path:line:column
+                                    // Print file location header
                                     if let Some(range) = diag_location {
                                         // Adjust line number based on where GraphQL was extracted
                                         // range.start.line is 0-indexed in apollo-compiler
@@ -189,7 +189,7 @@ pub async fn run(
                                         };
 
                                         println!(
-                                            "{} {}:{}:{}",
+                                            "\n{} {}:{}:{}",
                                             "error:".red().bold(),
                                             file_path,
                                             actual_line,
@@ -197,14 +197,14 @@ pub async fn run(
                                         );
                                     } else {
                                         println!(
-                                            "{} {}",
+                                            "\n{} {}",
                                             "error:".red().bold(),
                                             file_path
                                         );
                                     }
 
-                                    // Print the error message
-                                    println!("  {}", diagnostic.error);
+                                    // Print the beautiful DiagnosticList formatting
+                                    println!("{}", diagnostic);
                                 }
                                 OutputFormat::Json => {
                                     // For JSON output, format as structured data with adjusted locations
