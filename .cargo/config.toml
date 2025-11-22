@@ -1,0 +1,10 @@
+[target.'cfg(all())']
+rustflags = [
+    "-Dwarnings",
+    "-Dclippy::all",
+    "-Dclippy::pedantic",
+    "-Dclippy::nursery",
+    # Global allows for overly pedantic lints
+    "-Aclippy::missing_errors_doc",
+    "-Aclippy::missing_panics_doc",
+]

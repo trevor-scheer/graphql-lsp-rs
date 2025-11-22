@@ -8,7 +8,8 @@ pub struct Position {
 }
 
 impl Position {
-    pub fn new(line: usize, column: usize) -> Self {
+    #[must_use]
+    pub const fn new(line: usize, column: usize) -> Self {
         Self { line, column }
     }
 }
@@ -21,7 +22,8 @@ pub struct Range {
 }
 
 impl Range {
-    pub fn new(start: Position, end: Position) -> Self {
+    #[must_use]
+    pub const fn new(start: Position, end: Position) -> Self {
         Self { start, end }
     }
 }
@@ -38,7 +40,8 @@ pub struct SourceLocation {
 }
 
 impl SourceLocation {
-    pub fn new(offset: usize, length: usize, range: Range) -> Self {
+    #[must_use]
+    pub const fn new(offset: usize, length: usize, range: Range) -> Self {
         Self {
             offset,
             length,

@@ -1,3 +1,32 @@
-.claude
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
 
-target
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test artifacts
+*.profraw
+*.profdata
+
+# Documentation
+/target/doc/
+
+# Environment
+.env
+.env.local
+
+# Claude (keep)
+.claude

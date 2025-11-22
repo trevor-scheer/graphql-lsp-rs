@@ -46,12 +46,12 @@ pub fn load_config(path: &Path) -> Result<GraphQLConfig> {
 /// Load a GraphQL config from a string.
 /// The path is used for error messages and format detection.
 pub fn load_config_from_str(contents: &str, path: &Path) -> Result<GraphQLConfig> {
-    let extension = path
-        .extension()
-        .and_then(|ext| ext.to_str())
-        .unwrap_or("");
+    let extension = path.extension().and_then(|ext| ext.to_str()).unwrap_or("");
 
-    let file_name = path.file_name().and_then(|name| name.to_str()).unwrap_or("");
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
 
     let config = match extension {
         "yml" | "yaml" => parse_yaml(contents, path)?,
@@ -70,21 +70,17 @@ pub fn load_config_from_str(contents: &str, path: &Path) -> Result<GraphQLConfig
 
 /// Parse YAML configuration
 fn parse_yaml(contents: &str, path: &Path) -> Result<GraphQLConfig> {
-    serde_yaml::from_str(contents).map_err(|e| {
-        ConfigError::Invalid {
-            path: path.to_path_buf(),
-            message: format!("YAML parse error: {}", e),
-        }
+    serde_yaml::from_str(contents).map_err(|e| ConfigError::Invalid {
+        path: path.to_path_buf(),
+        message: format!("YAML parse error: {e}"),
     })
 }
 
 /// Parse JSON configuration
 fn parse_json(contents: &str, path: &Path) -> Result<GraphQLConfig> {
-    serde_json::from_str(contents).map_err(|e| {
-        ConfigError::Invalid {
-            path: path.to_path_buf(),
-            message: format!("JSON parse error: {}", e),
-        }
+    serde_json::from_str(contents).map_err(|e| ConfigError::Invalid {
+        path: path.to_path_buf(),
+        message: format!("JSON parse error: {e}"),
     })
 }
 
@@ -96,7 +92,7 @@ fn validate_config(config: &GraphQLConfig, path: &Path) -> Result<()> {
         if schema_paths.is_empty() {
             return Err(ConfigError::Invalid {
                 path: path.to_path_buf(),
-                message: format!("Project '{}' has empty schema configuration", project_name),
+                message: format!("Project '{project_name}' has empty schema configuration"),
             });
         }
 
@@ -105,10 +101,7 @@ fn validate_config(config: &GraphQLConfig, path: &Path) -> Result<()> {
             if schema_path.trim().is_empty() {
                 return Err(ConfigError::Invalid {
                     path: path.to_path_buf(),
-                    message: format!(
-                        "Project '{}' has empty schema path",
-                        project_name
-                    ),
+                    message: format!("Project '{project_name}' has empty schema path"),
                 });
             }
         }
@@ -119,10 +112,7 @@ fn validate_config(config: &GraphQLConfig, path: &Path) -> Result<()> {
             if doc_patterns.is_empty() {
                 return Err(ConfigError::Invalid {
                     path: path.to_path_buf(),
-                    message: format!(
-                        "Project '{}' has empty documents configuration",
-                        project_name
-                    ),
+                    message: format!("Project '{project_name}' has empty documents configuration"),
                 });
             }
 
@@ -130,10 +120,7 @@ fn validate_config(config: &GraphQLConfig, path: &Path) -> Result<()> {
                 if pattern.trim().is_empty() {
                     return Err(ConfigError::Invalid {
                         path: path.to_path_buf(),
-                        message: format!(
-                            "Project '{}' has empty document pattern",
-                            project_name
-                        ),
+                        message: format!("Project '{project_name}' has empty document pattern"),
                     });
                 }
             }

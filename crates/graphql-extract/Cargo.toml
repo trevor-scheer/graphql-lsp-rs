@@ -22,5 +22,6 @@ tempfile = "3.0"
 
 [features]
 default = []
-# typescript feature disabled for now
-# typescript = ["swc_core", "swc_common"]
+# Placeholder feature for TypeScript/JavaScript extraction
+# Will be enabled with SWC dependencies in Phase 4
+typescript = []

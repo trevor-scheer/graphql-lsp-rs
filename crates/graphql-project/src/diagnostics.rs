@@ -82,16 +82,19 @@ impl Diagnostic {
         }
     }
 
+    #[must_use]
     pub fn with_code(mut self, code: impl Into<String>) -> Self {
         self.code = Some(code.into());
         self
     }
 
+    #[must_use]
     pub fn with_source(mut self, source: impl Into<String>) -> Self {
         self.source = source.into();
         self
     }
 
+    #[must_use]
     pub fn with_related_info(mut self, info: RelatedInfo) -> Self {
         self.related_info.push(info);
         self

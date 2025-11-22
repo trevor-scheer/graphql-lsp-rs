@@ -35,24 +35,28 @@ pub struct FieldDefinition {
 }
 
 impl SchemaIndex {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Build index from schema string
+    #[must_use]
     pub fn from_schema(_schema: &str) -> Self {
         // TODO: Parse schema with apollo-parser and build index
         Self::new()
     }
 
     /// Get a type by name
+    #[must_use]
     pub fn get_type(&self, name: &str) -> Option<&TypeDefinition> {
         self.types.get(name)
     }
 
     /// Get fields for a type
+    #[must_use]
     pub fn get_fields(&self, type_name: &str) -> Option<&[FieldDefinition]> {
-        self.fields.get(type_name).map(|v| v.as_slice())
+        self.fields.get(type_name).map(Vec::as_slice)
     }
 }
 
@@ -88,6 +92,7 @@ pub struct FragmentInfo {
 }
 
 impl DocumentIndex {
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -105,11 +110,13 @@ impl DocumentIndex {
     }
 
     /// Get an operation by name
+    #[must_use]
     pub fn get_operation(&self, name: &str) -> Option<&OperationInfo> {
         self.operations.get(name)
     }
 
     /// Get a fragment by name
+    #[must_use]
     pub fn get_fragment(&self, name: &str) -> Option<&FragmentInfo> {
         self.fragments.get(name)
     }

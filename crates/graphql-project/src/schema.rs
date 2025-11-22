@@ -9,13 +9,15 @@ pub struct SchemaLoader {
 }
 
 impl SchemaLoader {
-    pub fn new(config: SchemaConfig) -> Self {
+    #[must_use]
+    pub const fn new(config: SchemaConfig) -> Self {
         Self {
             config,
             base_path: None,
         }
     }
 
+    #[must_use]
     pub fn with_base_path(mut self, path: impl AsRef<Path>) -> Self {
         self.base_path = Some(path.as_ref().to_path_buf());
         self
@@ -48,11 +50,10 @@ impl SchemaLoader {
 
     /// Load schema from local file(s), supporting glob patterns
     fn load_local(&self, pattern: &str) -> Result<Vec<String>> {
-        let pattern = if let Some(ref base) = self.base_path {
-            base.join(pattern).display().to_string()
-        } else {
-            pattern.to_string()
-        };
+        let pattern = self
+            .base_path
+            .as_ref()
+            .map_or_else(|| pattern.to_string(), |base| base.join(pattern).display().to_string());
 
         let mut schemas = Vec::new();
 
@@ -68,25 +69,20 @@ impl SchemaLoader {
                             schemas.push(content);
                         }
                         Err(e) => {
-                            return Err(ProjectError::SchemaLoad(format!(
-                                "Glob error: {}",
-                                e
-                            )));
+                            return Err(ProjectError::SchemaLoad(format!("Glob error: {e}")));
                         }
                     }
                 }
 
                 if !found_any {
                     return Err(ProjectError::SchemaLoad(format!(
-                        "No files matched pattern: {}",
-                        pattern
+                        "No files matched pattern: {pattern}"
                     )));
                 }
             }
             Err(e) => {
                 return Err(ProjectError::SchemaLoad(format!(
-                    "Invalid glob pattern '{}': {}",
-                    pattern, e
+                    "Invalid glob pattern '{pattern}': {e}"
                 )));
             }
         }
@@ -95,12 +91,12 @@ impl SchemaLoader {
     }
 
     /// Load schema from remote endpoint via introspection
+    #[allow(clippy::unused_async)] // Will be async when implemented
     async fn load_remote(&self, url: &str) -> Result<String> {
         // TODO: Implement GraphQL introspection query
         // For now, return a placeholder error
         Err(ProjectError::SchemaLoad(format!(
-            "Remote schema loading not yet implemented for URL: {}",
-            url
+            "Remote schema loading not yet implemented for URL: {url}"
         )))
     }
 }

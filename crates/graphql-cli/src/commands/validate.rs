@@ -6,6 +6,7 @@ use graphql_project::{GraphQLProject, Severity};
 use std::path::PathBuf;
 use std::process;
 
+#[allow(clippy::too_many_lines)] // Main validation logic - will refactor when more features are added
 pub async fn run(
     config_path: Option<PathBuf>,
     project_name: Option<String>,
@@ -18,34 +19,30 @@ pub async fn run(
     }
 
     // Find and load config
-    let config_path = match config_path {
-        Some(path) => path,
-        None => {
-            let current_dir = std::env::current_dir()?;
-            find_config(&current_dir)
-                .context("Failed to search for config")?
-                .context("No GraphQL config file found")?
-        }
+    let config_path = if let Some(path) = config_path {
+        path
+    } else {
+        let current_dir = std::env::current_dir()?;
+        find_config(&current_dir)
+            .context("Failed to search for config")?
+            .context("No GraphQL config file found")?
     };
 
     let config = load_config(&config_path).context("Failed to load config")?;
 
     // Get projects
-    let projects = GraphQLProject::from_config(config)?;
+    let projects = GraphQLProject::from_config(&config)?;
 
     // Filter by project name if specified
     let projects_to_validate: Vec<_> = if let Some(ref name) = project_name {
-        projects
-            .into_iter()
-            .filter(|(n, _)| n == name)
-            .collect()
+        projects.into_iter().filter(|(n, _)| n == name).collect()
     } else {
         projects
     };
 
     if projects_to_validate.is_empty() {
         if let Some(name) = project_name {
-            eprintln!("{}", format!("Project '{}' not found", name).red());
+            eprintln!("{}", format!("Project '{name}' not found").red());
             process::exit(1);
         }
     }
@@ -55,12 +52,12 @@ pub async fn run(
 
     for (name, project) in &projects_to_validate {
         if projects_to_validate.len() > 1 {
-            println!("\n{}", format!("=== Project: {} ===", name).bold().cyan());
+            println!("\n{}", format!("=== Project: {name} ===").bold().cyan());
         }
 
         // Load schema
         match project.load_schema().await {
-            Ok(_) => {
+            Ok(()) => {
                 if matches!(format, OutputFormat::Human) {
                     println!("{}", "✓ Schema loaded successfully".green());
                 }
@@ -77,7 +74,7 @@ pub async fn run(
 
         // Load documents
         match project.load_documents().await {
-            Ok(_) => {
+            Ok(()) => {
                 if matches!(format, OutputFormat::Human) {
                     println!("{}", "✓ Documents loaded successfully".green());
                 }
@@ -133,11 +130,7 @@ pub async fn run(
         } else {
             println!(
                 "{}",
-                format!(
-                    "Found {} error(s) and {} warning(s)",
-                    total_errors, total_warnings
-                )
-                .yellow()
+                format!("Found {total_errors} error(s) and {total_warnings} warning(s)").yellow()
             );
         }
     }

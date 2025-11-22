@@ -19,32 +19,31 @@ pub enum Language {
 
 impl Language {
     /// Detect language from file extension
+    #[must_use]
     pub fn from_path(path: &Path) -> Option<Self> {
         let extension = path.extension()?.to_str()?;
 
         match extension {
-            "graphql" | "gql" | "gqls" => Some(Language::GraphQL),
-            "ts" => Some(Language::TypeScript),
-            "tsx" => Some(Language::TypeScript),
-            "js" => Some(Language::JavaScript),
-            "jsx" => Some(Language::JavaScript),
-            "mjs" => Some(Language::JavaScript),
-            "cjs" => Some(Language::JavaScript),
-            "vue" => Some(Language::Vue),
-            "svelte" => Some(Language::Svelte),
-            "astro" => Some(Language::Astro),
+            "graphql" | "gql" | "gqls" => Some(Self::GraphQL),
+            "ts" | "tsx" => Some(Self::TypeScript),
+            "js" | "jsx" | "mjs" | "cjs" => Some(Self::JavaScript),
+            "vue" => Some(Self::Vue),
+            "svelte" => Some(Self::Svelte),
+            "astro" => Some(Self::Astro),
             _ => None,
         }
     }
 
     /// Check if this language requires parsing (vs raw GraphQL)
-    pub fn requires_parsing(&self) -> bool {
-        !matches!(self, Language::GraphQL)
+    #[must_use]
+    pub const fn requires_parsing(&self) -> bool {
+        !matches!(self, Self::GraphQL)
     }
 
     /// Check if this language is TypeScript/JavaScript
-    pub fn is_js_family(&self) -> bool {
-        matches!(self, Language::TypeScript | Language::JavaScript)
+    #[must_use]
+    pub const fn is_js_family(&self) -> bool {
+        matches!(self, Self::TypeScript | Self::JavaScript)
     }
 }
 

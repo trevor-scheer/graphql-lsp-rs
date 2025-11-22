@@ -1,4 +1,4 @@
-use crate::{ExtractError, Language, Result, SourceLocation, Position, Range};
+use crate::{ExtractError, Language, Position, Range, Result, SourceLocation};
 use std::fs;
 use std::path::Path;
 
@@ -9,8 +9,8 @@ pub struct ExtractConfig {
     /// Matches comments like: /* GraphQL */ `query { ... }`
     pub magic_comment: String,
 
-    /// Tag identifiers to extract (default: ["gql", "graphql"])
-    /// Matches: gql`query { ... }` or graphql`query { ... }`
+    /// Tag identifiers to extract (default: `["gql", "graphql"]`)
+    /// Matches: `gql`query { ... }`\` or `graphql`query { ... }`\`
     pub tag_identifiers: Vec<String>,
 
     /// Module names to recognize as GraphQL sources
@@ -62,6 +62,7 @@ pub fn extract_from_file(path: &Path, config: &ExtractConfig) -> Result<Vec<Extr
 }
 
 /// Extract GraphQL from source code string
+#[allow(unused_variables)] // config unused until TypeScript extraction is implemented
 pub fn extract_from_source(
     source: &str,
     language: Language,
@@ -90,7 +91,10 @@ pub fn extract_from_source(
             }
             #[cfg(not(feature = "typescript"))]
             {
-                Err(ExtractError::UnsupportedLanguage(language))
+                #[allow(clippy::used_underscore_binding)] // False positive with cfg
+                {
+                    Err(ExtractError::UnsupportedLanguage(language))
+                }
             }
         }
         _ => Err(ExtractError::UnsupportedLanguage(language)),
@@ -98,6 +102,7 @@ pub fn extract_from_source(
 }
 
 #[cfg(feature = "typescript")]
+#[allow(dead_code)] // Will be used when feature is enabled
 fn extract_from_js_family(
     _source: &str,
     _language: Language,
@@ -142,14 +147,14 @@ mod tests {
 
     #[test]
     fn test_extract_raw_graphql() {
-        let source = r#"
+        let source = r"
 query GetUser {
   user {
     id
     name
   }
 }
-"#;
+";
         let config = ExtractConfig::default();
         let result = extract_from_source(source, Language::GraphQL, &config).unwrap();
 

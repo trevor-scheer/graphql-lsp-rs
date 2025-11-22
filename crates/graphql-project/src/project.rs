@@ -1,6 +1,4 @@
-use crate::{
-    Diagnostic, DocumentIndex, ProjectError, Result, SchemaIndex, SchemaLoader,
-};
+use crate::{Diagnostic, DocumentIndex, Result, SchemaIndex, SchemaLoader};
 use graphql_config::{GraphQLConfig, ProjectConfig};
 use std::sync::{Arc, RwLock};
 
@@ -9,12 +7,14 @@ pub struct GraphQLProject {
     config: ProjectConfig,
     schema: Arc<RwLock<Option<String>>>,
     schema_index: Arc<RwLock<SchemaIndex>>,
+    #[allow(dead_code)] // Will be used when document loading is implemented
     document_index: Arc<RwLock<DocumentIndex>>,
     diagnostics: Arc<RwLock<Vec<Diagnostic>>>,
 }
 
 impl GraphQLProject {
     /// Create a new project from configuration
+    #[must_use]
     pub fn new(config: ProjectConfig) -> Self {
         Self {
             config,
@@ -26,7 +26,7 @@ impl GraphQLProject {
     }
 
     /// Create projects from GraphQL config (single or multi-project)
-    pub fn from_config(config: GraphQLConfig) -> Result<Vec<(String, Self)>> {
+    pub fn from_config(config: &GraphQLConfig) -> Result<Vec<(String, Self)>> {
         let mut projects = Vec::new();
 
         for (name, project_config) in config.projects() {
@@ -60,6 +60,7 @@ impl GraphQLProject {
     }
 
     /// Load documents from configured sources
+    #[allow(clippy::unused_async)] // Will be async when implemented
     pub async fn load_documents(&self) -> Result<()> {
         // TODO: Implement document loading
         // - Use glob patterns from config.documents
@@ -69,6 +70,7 @@ impl GraphQLProject {
     }
 
     /// Validate all documents against the schema
+    #[must_use]
     pub fn validate(&self) -> Vec<Diagnostic> {
         // TODO: Implement full validation
         // For now, return empty diagnostics
@@ -76,11 +78,13 @@ impl GraphQLProject {
     }
 
     /// Get schema as string
+    #[must_use]
     pub fn get_schema(&self) -> Option<String> {
         self.schema.read().unwrap().clone()
     }
 
     /// Get all diagnostics
+    #[must_use]
     pub fn get_diagnostics(&self) -> Vec<Diagnostic> {
         self.diagnostics.read().unwrap().clone()
     }
@@ -121,7 +125,7 @@ mod tests {
             extensions: None,
         });
 
-        let projects = GraphQLProject::from_config(config).unwrap();
+        let projects = GraphQLProject::from_config(&config).unwrap();
         assert_eq!(projects.len(), 1);
         assert_eq!(projects[0].0, "default");
     }

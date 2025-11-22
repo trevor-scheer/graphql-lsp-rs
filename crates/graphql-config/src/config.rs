@@ -3,53 +3,61 @@ use std::collections::HashMap;
 
 /// Top-level GraphQL configuration.
 /// Either a single project or multiple named projects.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum GraphQLConfig {
     /// Single project configuration
     Single(ProjectConfig),
     /// Multi-project configuration
-    Multi { projects: HashMap<String, ProjectConfig> },
+    Multi {
+        projects: HashMap<String, ProjectConfig>,
+    },
 }
 
 impl GraphQLConfig {
     /// Get all projects as an iterator.
     /// For single project configs, yields a single item with name "default".
+    #[must_use]
     pub fn projects(&self) -> Box<dyn Iterator<Item = (&str, &ProjectConfig)> + '_> {
         match self {
-            GraphQLConfig::Single(config) => Box::new(std::iter::once(("default", config))),
-            GraphQLConfig::Multi { projects } => {
-                Box::new(projects.iter().map(|(name, config)| (name.as_str(), config)))
-            }
+            Self::Single(config) => Box::new(std::iter::once(("default", config))),
+            Self::Multi { projects } => Box::new(
+                projects
+                    .iter()
+                    .map(|(name, config)| (name.as_str(), config)),
+            ),
         }
     }
 
     /// Get a specific project by name.
     /// For single project configs, returns the project if name is "default".
+    #[must_use]
     pub fn get_project(&self, name: &str) -> Option<&ProjectConfig> {
         match self {
-            GraphQLConfig::Single(config) if name == "default" => Some(config),
-            GraphQLConfig::Single(_) => None,
-            GraphQLConfig::Multi { projects } => projects.get(name),
+            Self::Single(config) if name == "default" => Some(config),
+            Self::Single(_) => None,
+            Self::Multi { projects } => projects.get(name),
         }
     }
 
     /// Check if this is a multi-project configuration
-    pub fn is_multi_project(&self) -> bool {
-        matches!(self, GraphQLConfig::Multi { .. })
+    #[must_use]
+    pub const fn is_multi_project(&self) -> bool {
+        matches!(self, Self::Multi { .. })
     }
 
     /// Get the number of projects
+    #[must_use]
     pub fn project_count(&self) -> usize {
         match self {
-            GraphQLConfig::Single(_) => 1,
-            GraphQLConfig::Multi { projects } => projects.len(),
+            Self::Single(_) => 1,
+            Self::Multi { projects } => projects.len(),
         }
     }
 }
 
 /// Configuration for a single GraphQL project
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectConfig {
     /// Schema source(s)
@@ -73,7 +81,7 @@ pub struct ProjectConfig {
 }
 
 /// Schema source configuration
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum SchemaConfig {
     /// Single file path or glob pattern
@@ -84,14 +92,16 @@ pub enum SchemaConfig {
 
 impl SchemaConfig {
     /// Get all schema paths/patterns as a slice
+    #[must_use]
     pub fn paths(&self) -> Vec<&str> {
         match self {
-            SchemaConfig::Path(path) => vec![path.as_str()],
-            SchemaConfig::Paths(paths) => paths.iter().map(|s| s.as_str()).collect(),
+            Self::Path(path) => vec![path.as_str()],
+            Self::Paths(paths) => paths.iter().map(String::as_str).collect(),
         }
     }
 
     /// Check if this schema config contains URLs (HTTP/HTTPS)
+    #[must_use]
     pub fn has_remote_schema(&self) -> bool {
         self.paths()
             .iter()
@@ -100,7 +110,7 @@ impl SchemaConfig {
 }
 
 /// Documents source configuration
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(untagged)]
 pub enum DocumentsConfig {
     /// Single pattern
@@ -111,10 +121,11 @@ pub enum DocumentsConfig {
 
 impl DocumentsConfig {
     /// Get all document patterns as a slice
+    #[must_use]
     pub fn patterns(&self) -> Vec<&str> {
         match self {
-            DocumentsConfig::Pattern(pattern) => vec![pattern.as_str()],
-            DocumentsConfig::Patterns(patterns) => patterns.iter().map(|s| s.as_str()).collect(),
+            Self::Pattern(pattern) => vec![pattern.as_str()],
+            Self::Patterns(patterns) => patterns.iter().map(String::as_str).collect(),
         }
     }
 }
@@ -204,10 +215,8 @@ mod tests {
         let single = DocumentsConfig::Pattern("**/*.graphql".to_string());
         assert_eq!(single.patterns(), vec!["**/*.graphql"]);
 
-        let multiple = DocumentsConfig::Patterns(vec![
-            "**/*.graphql".to_string(),
-            "**/*.ts".to_string(),
-        ]);
+        let multiple =
+            DocumentsConfig::Patterns(vec!["**/*.graphql".to_string(), "**/*.ts".to_string()]);
         assert_eq!(multiple.patterns(), vec!["**/*.graphql", "**/*.ts"]);
     }
 }

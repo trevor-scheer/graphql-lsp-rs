@@ -1,12 +1,21 @@
 use dashmap::DashMap;
 use graphql_project::GraphQLProject;
-use lsp_types::*;
+use lsp_types::{
+    CompletionOptions, CompletionParams, CompletionResponse, DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DidSaveTextDocumentParams,
+    DocumentSymbolParams, DocumentSymbolResponse, GotoDefinitionParams, GotoDefinitionResponse,
+    Hover, HoverParams, HoverProviderCapability, InitializeParams, InitializeResult,
+    InitializedParams, Location, MessageType, OneOf, ReferenceParams, ServerCapabilities,
+    ServerInfo, SymbolInformation, TextDocumentSyncCapability, TextDocumentSyncKind, Uri,
+    WorkspaceSymbol, WorkspaceSymbolParams,
+};
 use std::sync::Arc;
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::{Client, LanguageServer};
 
 pub struct GraphQLLanguageServer {
     client: Client,
+    #[allow(dead_code)] // Will be used when LSP features are implemented
     projects: Arc<DashMap<Uri, GraphQLProject>>,
 }
 
@@ -51,7 +60,6 @@ impl LanguageServer for GraphQLLanguageServer {
                 name: "GraphQL Language Server".to_string(),
                 version: Some(env!("CARGO_PKG_VERSION").to_string()),
             }),
-            ..Default::default()
         })
     }
 
