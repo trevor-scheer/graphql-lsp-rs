@@ -577,13 +577,13 @@ mod tests {
 
     #[test]
     fn test_parse_simple_object_type() {
-        let schema = r#"
+        let schema = r"
             type User {
                 id: ID!
                 name: String!
                 email: String
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -612,11 +612,11 @@ mod tests {
 
     #[test]
     fn test_parse_interface_type() {
-        let schema = r#"
+        let schema = r"
             interface Node {
                 id: ID!
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -630,9 +630,9 @@ mod tests {
 
     #[test]
     fn test_parse_union_type() {
-        let schema = r#"
+        let schema = r"
             union SearchResult = User | Post | Comment
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -644,13 +644,13 @@ mod tests {
 
     #[test]
     fn test_parse_enum_type() {
-        let schema = r#"
+        let schema = r"
             enum Status {
                 ACTIVE
                 INACTIVE
                 PENDING
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -660,9 +660,9 @@ mod tests {
 
     #[test]
     fn test_parse_scalar_type() {
-        let schema = r#"
+        let schema = r"
             scalar DateTime
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -674,13 +674,13 @@ mod tests {
 
     #[test]
     fn test_parse_input_object_type() {
-        let schema = r#"
+        let schema = r"
             input CreateUserInput {
                 name: String!
                 email: String!
                 age: Int
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -697,12 +697,12 @@ mod tests {
 
     #[test]
     fn test_parse_field_with_arguments() {
-        let schema = r#"
+        let schema = r"
             type Query {
                 user(id: ID!): User
                 users(limit: Int = 10, offset: Int): [User!]!
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -717,25 +717,25 @@ mod tests {
         assert_eq!(user_field.arguments[0].type_name, "ID!");
 
         // Test users field with multiple arguments and default value
-        let users_field = &fields[1];
-        assert_eq!(users_field.name, "users");
-        assert_eq!(users_field.arguments.len(), 2);
-        assert_eq!(users_field.arguments[0].name, "limit");
-        assert_eq!(users_field.arguments[0].type_name, "Int");
-        assert_eq!(users_field.arguments[0].default_value, Some("10".to_string()));
-        assert_eq!(users_field.arguments[1].name, "offset");
-        assert_eq!(users_field.arguments[1].type_name, "Int");
+        let list_field = &fields[1];
+        assert_eq!(list_field.name, "users");
+        assert_eq!(list_field.arguments.len(), 2);
+        assert_eq!(list_field.arguments[0].name, "limit");
+        assert_eq!(list_field.arguments[0].type_name, "Int");
+        assert_eq!(list_field.arguments[0].default_value, Some("10".to_string()));
+        assert_eq!(list_field.arguments[1].name, "offset");
+        assert_eq!(list_field.arguments[1].type_name, "Int");
     }
 
     #[test]
     fn test_parse_list_types() {
-        let schema = r#"
+        let schema = r"
             type Post {
                 tags: [String!]!
                 comments: [Comment]
                 matrix: [[Int]]
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -830,11 +830,11 @@ mod tests {
 
     #[test]
     fn test_parse_directive_definition() {
-        let schema = r#"
+        let schema = r"
             directive @auth(
                 requires: String!
             ) on FIELD_DEFINITION | OBJECT
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -849,7 +849,7 @@ mod tests {
 
     #[test]
     fn test_parse_multiple_types() {
-        let schema = r#"
+        let schema = r"
             type User {
                 id: ID!
                 name: String!
@@ -865,7 +865,7 @@ mod tests {
                 DRAFT
                 PUBLISHED
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -976,7 +976,7 @@ mod tests {
 
     #[test]
     fn test_parse_shopify_like_schema() {
-        let schema = r#"
+        let schema = r"
             type Product {
                 id: ID!
                 title: String!
@@ -1019,7 +1019,7 @@ mod tests {
                     filter: ProductFilter
                 ): [Product!]!
             }
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -1051,12 +1051,12 @@ mod tests {
 
     #[test]
     fn test_error_handling_invalid_schema() {
-        let schema = r#"
+        let schema = r"
             type User {
                 id: ID!
                 name: String!
                 // Missing closing brace
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
@@ -1077,9 +1077,9 @@ mod tests {
 
     #[test]
     fn test_type_without_fields() {
-        let schema = r#"
+        let schema = r"
             type Empty
-        "#;
+        ";
 
         let index = SchemaIndex::from_schema(schema);
 
