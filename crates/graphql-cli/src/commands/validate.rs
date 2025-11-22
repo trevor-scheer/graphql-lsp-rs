@@ -73,7 +73,7 @@ pub async fn run(
         }
 
         // Load documents
-        match project.load_documents().await {
+        match project.load_documents() {
             Ok(()) => {
                 if matches!(format, OutputFormat::Human) {
                     println!("{}", "✓ Documents loaded successfully".green());

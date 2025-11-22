@@ -19,6 +19,9 @@ pub enum ProjectError {
     #[error("Schema parse error: {0}")]
     SchemaParse(String),
 
+    #[error("Document loading error: {0}")]
+    DocumentLoad(String),
+
     #[error("Document parse error: {0}")]
     DocumentParse(String),
 
