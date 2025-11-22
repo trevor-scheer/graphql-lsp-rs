@@ -1,0 +1,31 @@
+[package]
+name = "graphql-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "graphql"
+path = "src/main.rs"
+
+[dependencies]
+# Internal dependencies
+graphql-project = { path = "../graphql-project" }
+graphql-config = { path = "../graphql-config" }
+
+# CLI
+clap = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+
+# Utilities
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Terminal UI
+colored = "2.0"
+indicatif = "0.17"

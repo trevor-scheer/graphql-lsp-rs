@@ -1,0 +1,19 @@
+[package]
+name = "graphql-config"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+glob = { workspace = true }
+walkdir = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }
+tempfile = "3.0"

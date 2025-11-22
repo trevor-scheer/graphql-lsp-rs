@@ -1,0 +1,36 @@
+[package]
+name = "graphql-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "graphql-lsp"
+path = "src/main.rs"
+
+[dependencies]
+# Internal dependencies
+graphql-project = { path = "../graphql-project" }
+graphql-config = { path = "../graphql-config" }
+
+# LSP
+tower-lsp-server = { workspace = true }
+lsp-types = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+
+# Concurrency
+dashmap = { workspace = true }
+
+# Utilities
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = "0.3"
