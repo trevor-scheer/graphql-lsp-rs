@@ -45,10 +45,9 @@ notify = "6.0"
 # HTTP
 reqwest = { version = "0.11", features = ["json"] }
 
-# Parsing (disabled for now due to version conflicts)
-# Will re-enable with updated versions in Phase 4
-# swc_core = { version = "0.90", features = ["ecma_parser", "ecma_ast", "ecma_visit"] }
-# swc_common = "0.33"
+# Parsing
+swc_core = { version = "48.0", features = ["ecma_parser", "ecma_ast", "ecma_visit"] }
+swc_common = "17.0"
 
 # Utilities
 dashmap = "5.0"

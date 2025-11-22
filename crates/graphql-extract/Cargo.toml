@@ -10,18 +10,9 @@ authors.workspace = true
 thiserror = { workspace = true }
 glob = { workspace = true }
 walkdir = { workspace = true }
-
-# For TypeScript/JavaScript parsing (disabled for now)
-# Will re-enable with updated versions in Phase 4
-# swc_core = { workspace = true, optional = true }
-# swc_common = { workspace = true, optional = true }
+swc_core = { workspace = true }
+swc_common = { workspace = true }
 
 [dev-dependencies]
 anyhow = { workspace = true }
 tempfile = "3.0"
-
-[features]
-default = []
-# Placeholder feature for TypeScript/JavaScript extraction
-# Will be enabled with SWC dependencies in Phase 4
-typescript = []
