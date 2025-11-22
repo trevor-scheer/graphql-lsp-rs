@@ -1,4 +1,4 @@
-use crate::{Diagnostic, DocumentIndex, Result, SchemaIndex, SchemaLoader};
+use crate::{Diagnostic, DocumentIndex, DocumentLoader, Result, SchemaIndex, SchemaLoader};
 use graphql_config::{GraphQLConfig, ProjectConfig};
 use std::sync::{Arc, RwLock};
 
@@ -7,7 +7,6 @@ pub struct GraphQLProject {
     config: ProjectConfig,
     schema: Arc<RwLock<Option<String>>>,
     schema_index: Arc<RwLock<SchemaIndex>>,
-    #[allow(dead_code)] // Will be used when document loading is implemented
     document_index: Arc<RwLock<DocumentIndex>>,
     diagnostics: Arc<RwLock<Vec<Diagnostic>>>,
 }
@@ -60,12 +59,21 @@ impl GraphQLProject {
     }
 
     /// Load documents from configured sources
-    #[allow(clippy::unused_async)] // Will be async when implemented
-    pub async fn load_documents(&self) -> Result<()> {
-        // TODO: Implement document loading
-        // - Use glob patterns from config.documents
-        // - Extract GraphQL from files using graphql-extract
-        // - Build document index
+    pub fn load_documents(&self) -> Result<()> {
+        // Return early if no documents configured
+        let Some(ref documents_config) = self.config.documents else {
+            return Ok(());
+        };
+
+        let loader = DocumentLoader::new(documents_config.clone());
+        let index = loader.load()?;
+
+        // Update document index
+        {
+            let mut document_index = self.document_index.write().unwrap();
+            *document_index = index;
+        }
+
         Ok(())
     }
 
@@ -81,6 +89,17 @@ impl GraphQLProject {
     #[must_use]
     pub fn get_schema(&self) -> Option<String> {
         self.schema.read().unwrap().clone()
+    }
+
+    /// Get document index
+    #[must_use]
+    pub fn get_document_index(&self) -> DocumentIndex {
+        let index = self.document_index.read().unwrap();
+        // Clone the inner data
+        DocumentIndex {
+            operations: index.operations.clone(),
+            fragments: index.fragments.clone(),
+        }
     }
 
     /// Get all diagnostics
