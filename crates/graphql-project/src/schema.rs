@@ -50,10 +50,10 @@ impl SchemaLoader {
 
     /// Load schema from local file(s), supporting glob patterns
     fn load_local(&self, pattern: &str) -> Result<Vec<String>> {
-        let pattern = self
-            .base_path
-            .as_ref()
-            .map_or_else(|| pattern.to_string(), |base| base.join(pattern).display().to_string());
+        let pattern = self.base_path.as_ref().map_or_else(
+            || pattern.to_string(),
+            |base| base.join(pattern).display().to_string(),
+        );
 
         let mut schemas = Vec::new();
 

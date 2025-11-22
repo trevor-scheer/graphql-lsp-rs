@@ -90,7 +90,6 @@ pub fn extract_from_source(
     }
 }
 
-#[cfg(feature = "typescript")]
 #[allow(dead_code)] // Will be used when TS/JS extraction is implemented
 #[allow(clippy::unnecessary_wraps)] // Will return errors when implemented
 #[allow(clippy::missing_const_for_fn)] // Will not be const when implemented
@@ -101,9 +100,9 @@ fn extract_from_js_family(
 ) -> Result<Vec<ExtractedGraphQL>> {
     use swc_common::sync::Lrc;
     use swc_common::{FileName, SourceMap};
-    use swc_ecma_ast::EsVersion;
-    use swc_ecma_parser::{parse_file_as_module, Syntax};
-    use swc_ecma_visit::VisitWith;
+    use swc_core::ecma::ast::EsVersion;
+    use swc_core::ecma::parser::{parse_file_as_module, Syntax};
+    use swc_core::ecma::visit::VisitWith;
 
     // Create source map for accurate position tracking
     let source_map = Lrc::new(SourceMap::default());
@@ -114,12 +113,12 @@ fn extract_from_js_family(
 
     // Configure syntax based on language
     let syntax = match language {
-        Language::TypeScript => Syntax::Typescript(swc_ecma_parser::TsSyntax {
+        Language::TypeScript => Syntax::Typescript(swc_core::ecma::parser::TsSyntax {
             tsx: true,
             decorators: true,
             ..Default::default()
         }),
-        Language::JavaScript => Syntax::Es(swc_ecma_parser::EsSyntax {
+        Language::JavaScript => Syntax::Es(swc_core::ecma::parser::EsSyntax {
             jsx: true,
             ..Default::default()
         }),
@@ -129,21 +128,26 @@ fn extract_from_js_family(
     // Parse the module
     let module = parse_file_as_module(&source_file, syntax, EsVersion::EsNext, None, &mut vec![])
         .map_err(|e| ExtractError::Parse {
-            path: std::path::PathBuf::from("input"),
-            message: format!("SWC parse error: {e:?}"),
-        })?;
+        path: std::path::PathBuf::from("input"),
+        message: format!("SWC parse error: {e:?}"),
+    })?;
 
     // Create visitor to collect GraphQL
     let mut visitor = GraphQLVisitor::new(source, config);
-    eprintln!("DEBUG: Starting visit_with on module with {} items", module.body.len());
+    eprintln!(
+        "DEBUG: Starting visit_with on module with {} items",
+        module.body.len()
+    );
     module.visit_with(&mut visitor);
-    eprintln!("DEBUG: After visit_with, extracted {} items", visitor.extracted.len());
+    eprintln!(
+        "DEBUG: After visit_with, extracted {} items",
+        visitor.extracted.len()
+    );
 
     Ok(visitor.extracted)
 }
 
 /// Visitor to extract GraphQL from JavaScript/TypeScript AST
-#[cfg(feature = "typescript")]
 struct GraphQLVisitor<'a> {
     source: &'a str,
     config: &'a ExtractConfig,
@@ -155,7 +159,6 @@ struct GraphQLVisitor<'a> {
     pending_comments: Vec<(usize, String)>,
 }
 
-#[cfg(feature = "typescript")]
 impl<'a> GraphQLVisitor<'a> {
     #[allow(clippy::unnecessary_wraps)] // Consistent interface for extraction methods
     fn new(source: &'a str, config: &'a ExtractConfig) -> Self {
@@ -182,7 +185,11 @@ impl<'a> GraphQLVisitor<'a> {
     }
 
     /// Extract string content from a template literal
-    fn extract_template_literal(&self, tpl: &swc_ecma_ast::Tpl, tag_name: Option<String>) -> Option<ExtractedGraphQL> {
+    fn extract_template_literal(
+        &self,
+        tpl: &swc_core::ecma::ast::Tpl,
+        tag_name: Option<String>,
+    ) -> Option<ExtractedGraphQL> {
         if tpl.quasis.is_empty() {
             return None;
         }
@@ -201,11 +208,7 @@ impl<'a> GraphQLVisitor<'a> {
 
             return Some(ExtractedGraphQL {
                 source: raw_str.to_string(),
-                location: SourceLocation::new(
-                    start_offset,
-                    length,
-                    Range::new(start_pos, end_pos),
-                ),
+                location: SourceLocation::new(start_offset, length, Range::new(start_pos, end_pos)),
                 tag_name,
             });
         }
@@ -222,11 +225,10 @@ impl<'a> GraphQLVisitor<'a> {
     }
 }
 
-#[cfg(feature = "typescript")]
-impl swc_ecma_visit::Visit for GraphQLVisitor<'_> {
+impl swc_core::ecma::visit::Visit for GraphQLVisitor<'_> {
     /// Visit import declarations to track GraphQL imports
-    fn visit_import_decl(&mut self, import: &swc_ecma_ast::ImportDecl) {
-        use swc_ecma_visit::VisitWith;
+    fn visit_import_decl(&mut self, import: &swc_core::ecma::ast::ImportDecl) {
+        use swc_core::ecma::visit::VisitWith;
         let module_source = String::from_utf8_lossy(import.src.value.as_bytes()).to_string();
         eprintln!("DEBUG: Visiting import from module: {module_source}");
 
@@ -234,19 +236,22 @@ impl swc_ecma_visit::Visit for GraphQLVisitor<'_> {
         if self.config.modules.contains(&module_source) {
             eprintln!("DEBUG: Module IS in configured modules list");
             for specifier in &import.specifiers {
-                use swc_ecma_ast::ImportSpecifier;
+                use swc_core::ecma::ast::ImportSpecifier;
                 match specifier {
                     ImportSpecifier::Named(named) => {
                         // Map local name to module source
-                        let local_name = String::from_utf8_lossy(named.local.sym.as_bytes()).to_string();
+                        let local_name =
+                            String::from_utf8_lossy(named.local.sym.as_bytes()).to_string();
                         self.imports.insert(local_name, module_source.clone());
                     }
                     ImportSpecifier::Default(default) => {
-                        let local_name = String::from_utf8_lossy(default.local.sym.as_bytes()).to_string();
+                        let local_name =
+                            String::from_utf8_lossy(default.local.sym.as_bytes()).to_string();
                         self.imports.insert(local_name, module_source.clone());
                     }
                     ImportSpecifier::Namespace(ns) => {
-                        let local_name = String::from_utf8_lossy(ns.local.sym.as_bytes()).to_string();
+                        let local_name =
+                            String::from_utf8_lossy(ns.local.sym.as_bytes()).to_string();
                         self.imports.insert(local_name, module_source.clone());
                     }
                 }
@@ -260,9 +265,9 @@ impl swc_ecma_visit::Visit for GraphQLVisitor<'_> {
     }
 
     /// Visit tagged template expressions (e.g., gql`query { ... }`)
-    fn visit_tagged_tpl(&mut self, tagged: &swc_ecma_ast::TaggedTpl) {
-        use swc_ecma_ast::Expr;
-        use swc_ecma_visit::VisitWith;
+    fn visit_tagged_tpl(&mut self, tagged: &swc_core::ecma::ast::TaggedTpl) {
+        use swc_core::ecma::ast::Expr;
+        use swc_core::ecma::visit::VisitWith;
         eprintln!("DEBUG: Visiting tagged template");
         // Extract tag identifier
         let tag_name = match &*tagged.tag {
@@ -304,9 +309,9 @@ impl swc_ecma_visit::Visit for GraphQLVisitor<'_> {
     }
 
     /// Visit call expressions to handle cases like gql(/* GraphQL */ "query")
-    fn visit_call_expr(&mut self, call: &swc_ecma_ast::CallExpr) {
-        use swc_ecma_ast::{Expr, Lit};
-        use swc_ecma_visit::VisitWith;
+    fn visit_call_expr(&mut self, call: &swc_core::ecma::ast::CallExpr) {
+        use swc_core::ecma::ast::{Expr, Lit};
+        use swc_core::ecma::visit::VisitWith;
         // Check if there are any string arguments with magic comments
         for arg in &call.args {
             if let Expr::Lit(Lit::Str(str_lit)) = &*arg.expr {
@@ -337,9 +342,9 @@ impl swc_ecma_visit::Visit for GraphQLVisitor<'_> {
     }
 
     /// Visit variable declarations to handle magic comments
-    fn visit_var_declarator(&mut self, decl: &swc_ecma_ast::VarDeclarator) {
-        use swc_ecma_ast::{Expr, Lit};
-        use swc_ecma_visit::VisitWith;
+    fn visit_var_declarator(&mut self, decl: &swc_core::ecma::ast::VarDeclarator) {
+        use swc_core::ecma::ast::{Expr, Lit};
+        use swc_core::ecma::visit::VisitWith;
         if let Some(init) = &decl.init {
             match &**init {
                 Expr::Lit(Lit::Str(str_lit)) => {
@@ -378,11 +383,6 @@ impl swc_ecma_visit::Visit for GraphQLVisitor<'_> {
         // Continue traversal into child nodes
         decl.visit_children_with(self);
     }
-    // TODO: Implement SWC-based extraction
-    // This will parse JS/TS files and extract:
-    // - Template literals tagged with gql/graphql
-    // - Strings preceded by magic comments (/* GraphQL */)
-    Ok(vec![])
 }
 
 /// Calculate position from byte offset
@@ -448,7 +448,6 @@ query GetUser {
         assert_eq!(pos, Position::new(2, 0));
     }
 
-    #[cfg(feature = "typescript")]
     mod typescript_tests {
         use super::*;
 
