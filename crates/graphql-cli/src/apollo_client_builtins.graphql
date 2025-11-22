@@ -1,0 +1,45 @@
+# Apollo Client built-in directives
+# These directives are available on the client side and don't need to be in the server schema
+
+directive @client(
+  """
+  When true, the resolver will always be called with an empty object as the parent value,
+  regardless of what the resolver for the field's parent returns.
+  """
+  always: Boolean
+) on FIELD | INLINE_FRAGMENT
+
+directive @connection(
+  """
+  Specify a custom store key for the paginated query's results.
+  """
+  key: String!
+
+  """
+  An optional array of query argument names to include in the generated store key.
+  """
+  filter: [String!]
+) on FIELD
+
+directive @defer(
+  """
+  If false, the @defer is not applied and the data will be delivered as if it were not deferred.
+  """
+  if: Boolean
+
+  """
+  A label to identify the deferred fragment.
+  """
+  label: String
+) on FRAGMENT_SPREAD | INLINE_FRAGMENT
+
+directive @export(
+  """
+  The name of the variable to export this field as.
+  """
+  as: String!
+) on FIELD
+
+directive @nonreactive on FIELD
+
+directive @unmask on FRAGMENT_SPREAD | INLINE_FRAGMENT
