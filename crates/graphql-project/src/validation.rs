@@ -17,7 +17,7 @@ impl Validator {
 
     /// Validate a document string against a schema
     ///
-    /// Returns Ok(()) if the document is valid, or Err with a DiagnosticList if there are errors.
+    /// Returns Ok(()) if the document is valid, or Err with a `DiagnosticList` if there are errors.
     /// Uses apollo-compiler's comprehensive validation which includes:
     /// - Syntax validation
     /// - Schema validation
@@ -26,7 +26,7 @@ impl Validator {
     /// - Variable validation
     /// - Type checking
     ///
-    /// The returned DiagnosticList provides rich formatting capabilities for CLI output
+    /// The returned `DiagnosticList` provides rich formatting capabilities for CLI output
     /// and can be converted to LSP diagnostics by the language server package.
     pub fn validate_document(
         &self,

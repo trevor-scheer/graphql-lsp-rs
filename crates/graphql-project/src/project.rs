@@ -78,10 +78,10 @@ impl GraphQLProject {
 
     /// Validate a single document string against the loaded schema
     ///
-    /// Returns Ok(()) if valid, or Err with a DiagnosticList containing errors and warnings.
+    /// Returns Ok(()) if valid, or Err with a `DiagnosticList` containing errors and warnings.
     /// This validates a single GraphQL document against the project's schema.
     ///
-    /// The DiagnosticList can be used directly for CLI output or converted to LSP diagnostics
+    /// The `DiagnosticList` can be used directly for CLI output or converted to LSP diagnostics
     /// by the language server package.
     pub fn validate_document(&self, document: &str) -> std::result::Result<(), DiagnosticList> {
         let schema_index = self.schema_index.read().unwrap();
