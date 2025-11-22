@@ -457,7 +457,7 @@ query GetUser {
 
         #[test]
         fn test_extract_tagged_template_with_import() {
-            let source = r#"
+            let source = r"
 import { gql } from 'graphql-tag';
 
 const query = gql`
@@ -468,7 +468,7 @@ const query = gql`
     }
   }
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -479,7 +479,7 @@ const query = gql`
 
         #[test]
         fn test_extract_tagged_template_without_import_disallowed() {
-            let source = r#"
+            let source = r"
 const query = gql`
   query GetUser {
     user {
@@ -487,7 +487,7 @@ const query = gql`
     }
   }
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -497,7 +497,7 @@ const query = gql`
 
         #[test]
         fn test_extract_tagged_template_without_import_allowed() {
-            let source = r#"
+            let source = r"
 const query = gql`
   query GetUser {
     user {
@@ -505,9 +505,11 @@ const query = gql`
     }
   }
 `;
-"#;
-            let mut config = ExtractConfig::default();
-            config.allow_global_identifiers = true;
+";
+            let config = ExtractConfig {
+                allow_global_identifiers: true,
+                ..Default::default()
+            };
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
             // Should extract because global identifiers are allowed
@@ -518,7 +520,7 @@ const query = gql`
 
         #[test]
         fn test_extract_from_apollo_client() {
-            let source = r#"
+            let source = r"
 import { gql } from '@apollo/client';
 
 const QUERY = gql`
@@ -529,7 +531,7 @@ const QUERY = gql`
     }
   }
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -540,13 +542,13 @@ const QUERY = gql`
 
         #[test]
         fn test_extract_multiple_queries() {
-            let source = r#"
+            let source = r"
 import { gql } from 'graphql-tag';
 
 const query1 = gql`query Q1 { field1 }`;
 const query2 = gql`query Q2 { field2 }`;
 const query3 = gql`mutation M1 { updateField }`;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -558,7 +560,7 @@ const query3 = gql`mutation M1 { updateField }`;
 
         #[test]
         fn test_extract_graphql_tag_identifier() {
-            let source = r#"
+            let source = r"
 import { graphql } from 'graphql-tag';
 
 const query = graphql`
@@ -568,7 +570,7 @@ const query = graphql`
     }
   }
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -579,7 +581,7 @@ const query = graphql`
 
         #[test]
         fn test_extract_from_javascript() {
-            let source = r#"
+            let source = r"
 import { gql } from 'graphql-tag';
 
 const query = gql`
@@ -589,7 +591,7 @@ const query = gql`
     }
   }
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::JavaScript, &config).unwrap();
 
@@ -599,7 +601,7 @@ const query = gql`
 
         #[test]
         fn test_extract_with_jsx() {
-            let source = r#"
+            let source = r"
 import { gql } from '@apollo/client';
 import { useQuery } from '@apollo/client';
 
@@ -616,7 +618,7 @@ function UserComponent({ userId }) {
   const { data } = useQuery(GET_USER, { variables: { id: userId } });
   return <div>{data?.user?.name}</div>;
 }
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -626,11 +628,11 @@ function UserComponent({ userId }) {
 
         #[test]
         fn test_extract_with_custom_tag() {
-            let source = r#"
+            let source = r"
 import { customGql } from 'graphql-tag';
 
 const query = customGql`query Custom { field }`;
-"#;
+";
             let mut config = ExtractConfig::default();
             config.tag_identifiers.push("customGql".to_string());
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
@@ -642,11 +644,11 @@ const query = customGql`query Custom { field }`;
 
         #[test]
         fn test_import_from_unknown_module() {
-            let source = r#"
+            let source = r"
 import { gql } from 'unknown-module';
 
 const query = gql`query Test { field }`;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -656,11 +658,11 @@ const query = gql`query Test { field }`;
 
         #[test]
         fn test_default_import() {
-            let source = r#"
+            let source = r"
 import gql from 'graphql-tag';
 
 const query = gql`query Test { field }`;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -670,11 +672,11 @@ const query = gql`query Test { field }`;
 
         #[test]
         fn test_renamed_import() {
-            let source = r#"
+            let source = r"
 import { gql as query } from 'graphql-tag';
 
 const q = query`query Test { field }`;
-"#;
+";
             let mut config = ExtractConfig::default();
             config.tag_identifiers.push("query".to_string());
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
@@ -685,14 +687,14 @@ const q = query`query Test { field }`;
 
         #[test]
         fn test_typescript_decorators() {
-            let source = r#"
+            let source = r"
 import { gql } from 'graphql-tag';
 
 @Component
 class UserQuery {
   query = gql`query GetUser { user { id } }`;
 }
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -717,7 +719,7 @@ class UserQuery {
 
         #[test]
         fn test_multiline_query_formatting() {
-            let source = r#"
+            let source = r"
 import { gql } from 'graphql-tag';
 
 const query = gql`
@@ -733,7 +735,7 @@ const query = gql`
     }
   }
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -746,7 +748,7 @@ const query = gql`
 
         #[test]
         fn test_fragment_extraction() {
-            let source = r#"
+            let source = r"
 import { gql } from '@apollo/client';
 
 const USER_FRAGMENT = gql`
@@ -765,20 +767,20 @@ const GET_USER = gql`
   }
   ${USER_FRAGMENT}
 `;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
             // Should extract both fragments (the second has an expression, but we can count them)
-            assert!(result.len() >= 1);
+            assert!(!result.is_empty());
             assert!(result[0].source.contains("fragment UserFields"));
         }
 
         #[test]
         fn test_location_tracking() {
-            let source = r#"import { gql } from 'graphql-tag';
+            let source = r"import { gql } from 'graphql-tag';
 const q = gql`query Test { field }`;
-"#;
+";
             let config = ExtractConfig::default();
             let result = extract_from_source(source, Language::TypeScript, &config).unwrap();
 
@@ -801,15 +803,15 @@ const q = gql`query Test { field }`;
                 (Language::JavaScript, "script.cjs"),
             ];
 
-            let source = r#"
+            let source = r"
 import { gql } from 'graphql-tag';
 const query = gql`query Test { field }`;
-"#;
+";
 
             for (lang, _filename) in test_cases {
                 let config = ExtractConfig::default();
                 let result = extract_from_source(source, lang, &config).unwrap();
-                assert_eq!(result.len(), 1, "Failed for {:?}", lang);
+                assert_eq!(result.len(), 1, "Failed for {lang:?}");
             }
         }
     }
