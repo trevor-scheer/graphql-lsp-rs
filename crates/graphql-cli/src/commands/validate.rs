@@ -178,14 +178,15 @@ pub async fn run(
                                     // Print file location header
                                     if let Some(range) = diag_location {
                                         // Adjust line number based on where GraphQL was extracted
-                                        // range.start.line is 0-indexed in apollo-compiler
+                                        // range.start.line is 1-indexed from apollo-compiler's line_column_range()
                                         // item.location.range.start.line is 0-indexed in graphql-extract
-                                        let actual_line = item.location.range.start.line + range.start.line + 1; // +1 for 1-indexed display
-                                        let actual_column = if range.start.line == 0 {
-                                            // First line: add column offset
-                                            item.location.range.start.column + range.start.column + 1
+                                        // Calculation: file_line = extraction_start_line (0-indexed) + diagnostic_line (1-indexed)
+                                        let actual_line = item.location.range.start.line + range.start.line;
+                                        let actual_column = if range.start.line == 1 {
+                                            // First line of GraphQL: add column offset from where template starts
+                                            item.location.range.start.column + range.start.column
                                         } else {
-                                            range.start.column + 1
+                                            range.start.column
                                         };
 
                                         println!(
@@ -209,8 +210,9 @@ pub async fn run(
                                 OutputFormat::Json => {
                                     // For JSON output, format as structured data with adjusted locations
                                     let adjusted_location = diag_location.map(|range| {
+                                        // Same calculation as Human format
                                         let actual_line = item.location.range.start.line + range.start.line;
-                                        let actual_column = if range.start.line == 0 {
+                                        let actual_column = if range.start.line == 1 {
                                             item.location.range.start.column + range.start.column
                                         } else {
                                             range.start.column
