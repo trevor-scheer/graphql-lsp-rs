@@ -30,8 +30,14 @@ pub async fn run(
 
     let config = load_config(&config_path).context("Failed to load config")?;
 
-    // Get projects
-    let projects = GraphQLProject::from_config(&config)?;
+    // Get the base directory from the config path
+    let base_dir = config_path
+        .parent()
+        .context("Failed to get config directory")?
+        .to_path_buf();
+
+    // Get projects with base directory
+    let projects = GraphQLProject::from_config_with_base(&config, base_dir)?;
 
     // Filter by project name if specified
     let projects_to_validate: Vec<_> = if let Some(ref name) = project_name {
@@ -58,7 +64,13 @@ pub async fn run(
         match project.load_schema().await {
             Ok(()) => {
                 if matches!(format, OutputFormat::Human) {
-                    println!("{}", "✓ Schema loaded successfully".green());
+                    let schema = project.get_schema();
+                    if let Some(ref schema_str) = schema {
+                        let line_count = schema_str.lines().count();
+                        println!("{} ({} lines)", "✓ Schema loaded successfully".green(), line_count);
+                    } else {
+                        println!("{}", "✓ Schema loaded successfully".green());
+                    }
                 }
             }
             Err(e) => {
@@ -75,7 +87,15 @@ pub async fn run(
         match project.load_documents() {
             Ok(()) => {
                 if matches!(format, OutputFormat::Human) {
-                    println!("{}", "✓ Documents loaded successfully".green());
+                    let doc_index = project.get_document_index();
+                    let op_count = doc_index.operations.len();
+                    let frag_count = doc_index.fragments.len();
+                    println!(
+                        "{} ({} operations, {} fragments)",
+                        "✓ Documents loaded successfully".green(),
+                        op_count,
+                        frag_count
+                    );
                 }
             }
             Err(e) => {
@@ -102,21 +122,38 @@ pub async fn run(
 
         // Validate each file
         for file_path in file_paths {
-            // Read the file contents
-            let contents = match std::fs::read_to_string(file_path) {
-                Ok(contents) => contents,
+            // Use graphql-extract to extract GraphQL from the file
+            // This handles both .graphql files and embedded GraphQL in TypeScript/JavaScript
+            let extracted = match graphql_extract::extract_from_file(
+                std::path::Path::new(file_path),
+                &graphql_extract::ExtractConfig::default(),
+            ) {
+                Ok(items) => items,
                 Err(e) => {
-                    eprintln!("{} {}: {}", "✗ Failed to read".red(), file_path, e);
+                    eprintln!(
+                        "{} {}: {}",
+                        "✗ Failed to extract GraphQL from".red(),
+                        file_path,
+                        e
+                    );
                     continue;
                 }
             };
 
-            // For now, just validate the raw file contents as GraphQL
-            // TODO: Use graphql-extract once it's available in the CLI
-            let extracted = vec![contents];
+            if extracted.is_empty() {
+                if matches!(format, OutputFormat::Human) {
+                    eprintln!(
+                        "{} {} (no GraphQL found)",
+                        "⚠".yellow(),
+                        file_path
+                    );
+                }
+                continue;
+            }
 
             // Validate each extracted GraphQL document
-            for (doc_index, source) in extracted.iter().enumerate() {
+            for (doc_index, item) in extracted.iter().enumerate() {
+                let source = &item.source;
                 match project.validate_document(source) {
                     Ok(()) => {
                         // Valid document - no output in human mode unless verbose

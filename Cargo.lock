@@ -756,6 +756,7 @@ dependencies = [
  "clap",
  "colored",
  "graphql-config",
+ "graphql-extract",
  "graphql-project",
  "indicatif",
  "serde",
