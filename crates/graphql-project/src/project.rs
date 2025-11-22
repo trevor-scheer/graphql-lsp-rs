@@ -1,4 +1,4 @@
-use crate::{Diagnostic, DocumentIndex, DocumentLoader, Result, SchemaIndex, SchemaLoader};
+use crate::{Diagnostic, DocumentIndex, DocumentLoader, Result, SchemaIndex, SchemaLoader, Validator};
 use graphql_config::{GraphQLConfig, ProjectConfig};
 use std::sync::{Arc, RwLock};
 
@@ -77,12 +77,32 @@ impl GraphQLProject {
         Ok(())
     }
 
-    /// Validate all documents against the schema
+    /// Validate all loaded documents against the schema
+    ///
+    /// Returns a list of validation diagnostics (errors and warnings) from all documents.
+    /// Currently returns empty diagnostics - will be implemented when document loading is complete.
     #[must_use]
     pub fn validate(&self) -> Vec<Diagnostic> {
-        // TODO: Implement full validation
-        // For now, return empty diagnostics
+        // TODO: Iterate over all documents in document_index and validate each
+        // For now, return stored diagnostics
         self.diagnostics.read().unwrap().clone()
+    }
+
+    /// Validate a single document string against the loaded schema
+    ///
+    /// Returns a list of validation diagnostics (errors and warnings).
+    /// This validates a single GraphQL document against the project's schema.
+    #[must_use]
+    pub fn validate_document(&self, document: &str) -> Vec<Diagnostic> {
+        let schema_index = self.schema_index.read().unwrap();
+        let validator = Validator::new();
+        validator.validate_document(document, &schema_index)
+    }
+
+    /// Get the schema index for advanced operations
+    #[must_use]
+    pub fn get_schema_index(&self) -> SchemaIndex {
+        self.schema_index.read().unwrap().clone()
     }
 
     /// Get schema as string
