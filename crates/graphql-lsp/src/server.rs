@@ -47,35 +47,47 @@ impl GraphQLLanguageServer {
             }
             Err(diagnostic_list) => {
                 // Convert apollo-compiler diagnostics to LSP diagnostics
-                // For now, we'll create a simple diagnostic at line 0 with the full message
-                // TODO: Parse the diagnostic output to extract proper line/column info
                 diagnostic_list
                     .iter()
-                    .map(|diag| {
-                        // Use the Display formatting to get the full diagnostic message
-                        let message = format!("{}", diag);
-
-                        // For now, place error at the start of the document
-                        // In the future, we should parse the diagnostic to extract proper location
-                        let range = Range {
-                            start: Position {
-                                line: 0,
-                                character: 0,
-                            },
-                            end: Position {
-                                line: 0,
-                                character: 100,
-                            },
+                    .filter_map(|diag| {
+                        // Extract location information from the diagnostic
+                        let range = if let Some(loc_range) = diag.line_column_range() {
+                            // apollo-compiler uses 1-based line/column, LSP uses 0-based
+                            Range {
+                                start: Position {
+                                    line: loc_range.start.line.saturating_sub(1) as u32,
+                                    character: loc_range.start.column.saturating_sub(1) as u32,
+                                },
+                                end: Position {
+                                    line: loc_range.end.line.saturating_sub(1) as u32,
+                                    character: loc_range.end.column.saturating_sub(1) as u32,
+                                },
+                            }
+                        } else {
+                            // Fallback: if no location, place at start of document
+                            Range {
+                                start: Position {
+                                    line: 0,
+                                    character: 0,
+                                },
+                                end: Position {
+                                    line: 0,
+                                    character: 1,
+                                },
+                            }
                         };
 
-                        Diagnostic {
+                        // Extract just the error message without location prefix
+                        let message = format!("{}", diag.error);
+
+                        Some(Diagnostic {
                             range,
                             severity: Some(DiagnosticSeverity::ERROR),
                             code: None,
                             source: Some("graphql".to_string()),
                             message,
                             ..Default::default()
-                        }
+                        })
                     })
                     .collect()
             }
