@@ -47,12 +47,12 @@ impl GraphQLProject {
     /// Create projects from GraphQL config with a base directory
     pub fn from_config_with_base(
         config: &GraphQLConfig,
-        base_dir: std::path::PathBuf,
+        base_dir: &std::path::Path,
     ) -> Result<Vec<(String, Self)>> {
         let mut projects = Vec::new();
 
         for (name, project_config) in config.projects() {
-            let project = Self::new(project_config.clone()).with_base_dir(base_dir.clone());
+            let project = Self::new(project_config.clone()).with_base_dir(base_dir.to_path_buf());
             projects.push((name.to_string(), project));
         }
 

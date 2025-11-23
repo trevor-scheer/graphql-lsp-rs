@@ -25,11 +25,12 @@ impl SchemaLoader {
 
     /// Load schema as a string
     pub async fn load(&self) -> Result<String> {
-        let mut schema_parts = Vec::new();
-
         // Include Apollo Client built-in directives
         // These are client-side directives that don't need to be in the server schema
-        const APOLLO_CLIENT_BUILTINS: &str = include_str!("../../graphql-cli/src/apollo_client_builtins.graphql");
+        const APOLLO_CLIENT_BUILTINS: &str =
+            include_str!("../../graphql-cli/src/apollo_client_builtins.graphql");
+
+        let mut schema_parts = Vec::new();
         schema_parts.push(APOLLO_CLIENT_BUILTINS.to_string());
 
         for path in self.config.paths() {

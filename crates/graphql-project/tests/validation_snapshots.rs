@@ -23,15 +23,14 @@ fn to_relative_path(path: &Path) -> String {
         .expect("Failed to find workspace root");
 
     path.strip_prefix(workspace_root)
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| path.display().to_string())
+        .map_or_else(|_| path.display().to_string(), |p| p.display().to_string())
 }
 
 /// Format diagnostics for snapshot testing
 fn format_diagnostics(diagnostics: &apollo_compiler::validation::DiagnosticList) -> String {
     diagnostics
         .iter()
-        .map(|d| format!("{}", d))
+        .map(|d| format!("{d}"))
         .collect::<Vec<_>>()
         .join("\n\n")
 }
@@ -155,7 +154,7 @@ fn test_valid_typescript_snapshot() {
         let mut referenced_fragments = Vec::new();
         for frag in &all_fragments {
             let frag_name = frag.split_whitespace().nth(1).unwrap_or("");
-            if item.source.contains(&format!("...{}", frag_name)) {
+            if item.source.contains(&format!("...{frag_name}")) {
                 referenced_fragments.push(*frag);
             }
         }
@@ -280,7 +279,7 @@ fn test_multiline_error_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
 
-    let document = r#"
+    let document = r"
 query GetUser($id: ID!) {
   user(id: $id) {
     id
@@ -294,7 +293,7 @@ query GetUser($id: ID!) {
     }
   }
 }
-"#;
+";
 
     let file_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -313,7 +312,7 @@ fn test_complex_nested_error_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
 
-    let document = r#"
+    let document = r"
 query ComplexQuery($userId: ID!, $postId: ID!) {
   user(id: $userId) {
     id
@@ -333,7 +332,7 @@ query ComplexQuery($userId: ID!, $postId: ID!) {
     nonExistentField
   }
 }
-"#;
+";
 
     let file_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -352,7 +351,7 @@ fn test_undefined_fragment_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
 
-    let document = r#"
+    let document = r"
 query GetUser($id: ID!) {
   user(id: $id) {
     ...UndefinedFragment
@@ -360,7 +359,7 @@ query GetUser($id: ID!) {
     name
   }
 }
-"#;
+";
 
     let file_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")
@@ -379,14 +378,14 @@ fn test_type_mismatch_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
 
-    let document = r#"
+    let document = r"
 query GetUser($id: String!) {
   user(id: $id) {
     id
     name
   }
 }
-"#;
+";
 
     let file_path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("tests")

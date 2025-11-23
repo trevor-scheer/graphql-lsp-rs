@@ -37,7 +37,7 @@ pub async fn run(
         .to_path_buf();
 
     // Get projects with base directory
-    let projects = GraphQLProject::from_config_with_base(&config, base_dir)?;
+    let projects = GraphQLProject::from_config_with_base(&config, &base_dir)?;
 
     // Filter by project name if specified
     let projects_to_validate: Vec<_> = if let Some(ref name) = project_name {
@@ -172,7 +172,7 @@ pub async fn run(
             }
 
             // Validate each extracted GraphQL document
-            for item in extracted.iter() {
+            for item in &extracted {
                 let source = &item.source;
 
                 // Skip documents that only contain fragments
@@ -192,9 +192,9 @@ pub async fn run(
                 while let Some(doc) = to_process.pop() {
                     for line in doc.lines() {
                         let trimmed = line.trim();
-                        if trimmed.starts_with("...") {
+                        if let Some(stripped) = trimmed.strip_prefix("...") {
                             // Extract fragment name (everything after ... until whitespace or special char)
-                            let frag_name = trimmed[3..]
+                            let frag_name = stripped
                                 .split(|c: char| c.is_whitespace() || c == '@')
                                 .next()
                                 .unwrap_or("");
@@ -204,7 +204,7 @@ pub async fn run(
                                 // Find and queue the fragment definition for processing
                                 if let Some(frag_def) = all_fragments
                                     .iter()
-                                    .find(|f| f.contains(&format!("fragment {}", frag_name)))
+                                    .find(|f| f.contains(&format!("fragment {frag_name}")))
                                 {
                                     to_process.push(frag_def.clone());
                                 }
@@ -219,7 +219,7 @@ pub async fn run(
                     .filter(|frag| {
                         referenced_fragments
                             .iter()
-                            .any(|name| frag.contains(&format!("fragment {}", name)))
+                            .any(|name| frag.contains(&format!("fragment {name}")))
                     })
                     .collect();
 
@@ -232,7 +232,7 @@ pub async fn run(
                         .map(|s| s.as_str())
                         .collect::<Vec<_>>()
                         .join("\n\n");
-                    format!("{}\n\n{}", source, fragments_str)
+                    format!("{source}\n\n{fragments_str}")
                 };
 
                 // Validate with the actual file path and line offset
@@ -256,7 +256,7 @@ pub async fn run(
                             match format {
                                 OutputFormat::Human => {
                                     // Just print the diagnostic - it already has the correct location
-                                    println!("\n{}", diagnostic);
+                                    println!("\n{diagnostic}");
                                 }
                                 OutputFormat::Json => {
                                     // For JSON output, extract location from diagnostic
