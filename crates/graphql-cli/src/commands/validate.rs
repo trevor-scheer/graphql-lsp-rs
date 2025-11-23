@@ -225,7 +225,7 @@ pub async fn run(
 
                 // Combine the operation with all referenced fragments (including transitive dependencies)
                 let combined_source = if relevant_fragments.is_empty() {
-                    source.to_string()
+                    source.clone()
                 } else {
                     let fragments_str = relevant_fragments
                         .iter()

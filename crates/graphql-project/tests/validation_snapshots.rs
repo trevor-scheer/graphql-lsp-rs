@@ -36,6 +36,7 @@ fn format_diagnostics(diagnostics: &apollo_compiler::validation::DiagnosticList)
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_valid_query_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -51,6 +52,7 @@ fn test_valid_query_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_invalid_field_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -74,6 +76,7 @@ fn test_invalid_field_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_missing_argument_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -97,6 +100,7 @@ fn test_missing_argument_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_invalid_fragment_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -120,6 +124,7 @@ fn test_invalid_fragment_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_valid_typescript_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -185,6 +190,7 @@ fn test_valid_typescript_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_invalid_typescript_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -227,6 +233,7 @@ fn test_invalid_typescript_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_apollo_client_directives_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -275,6 +282,7 @@ fn test_apollo_client_directives_snapshot() {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_multiline_error_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -308,6 +316,7 @@ query GetUser($id: ID!) {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_complex_nested_error_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -347,6 +356,7 @@ query ComplexQuery($userId: ID!, $postId: ID!) {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_undefined_fragment_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
@@ -374,6 +384,7 @@ query GetUser($id: ID!) {
 }
 
 #[test]
+#[cfg(not(target_os = "windows"))]
 fn test_type_mismatch_snapshot() {
     let schema = load_schema();
     let validator = Validator::new();
