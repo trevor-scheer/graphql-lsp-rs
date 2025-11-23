@@ -1,0 +1,66 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: "all_diagnostics.join(\"\\n\\n\")"
+---
+=== Query 1 ===
+Error: type `User` does not have a field `isLoggedIn`
+    ╭─[ crates/graphql-project/tests/fixtures/apollo_client_directives.tsx:9:7 ]
+    │
+  9 │       isLoggedIn @client
+    │       ─────┬────  
+    │            ╰────── field `isLoggedIn` selected here
+    │
+    ├─[ schema.graphql:15:6 ]
+    │
+ 15 │ type User {
+    │      ──┬─  
+    │        ╰─── type `User` defined here
+    │ 
+    │ Note: path to the field: `query GetUser → user → isLoggedIn`
+────╯
+
+
+Error: type `User` does not have a field `localData`
+    ╭─[ crates/graphql-project/tests/fixtures/apollo_client_directives.tsx:10:7 ]
+    │
+ 10 │       localData @client(always: true)
+    │       ────┬────  
+    │           ╰────── field `localData` selected here
+    │
+    ├─[ schema.graphql:15:6 ]
+    │
+ 15 │ type User {
+    │      ──┬─  
+    │        ╰─── type `User` defined here
+    │ 
+    │ Note: path to the field: `query GetUser → user → localData`
+────╯
+
+
+=== Query 2 ===
+Error: unused variable: `$after`
+    ╭─[ crates/graphql-project/tests/fixtures/apollo_client_directives.tsx:16:18 ]
+    │
+ 16 │   query GetPosts($after: String) {
+    │                  ───┬──  
+    │                     ╰──── variable is never used
+────╯
+
+
+Error: cannot find directive `@connection` in this document
+    ╭─[ crates/graphql-project/tests/fixtures/apollo_client_directives.tsx:17:11 ]
+    │
+ 17 │     posts @connection(key: "allPosts", filter: ["published"]) {
+    │           ─────────────────────────┬─────────────────────────  
+    │                                    ╰─────────────────────────── directive not defined
+────╯
+
+
+=== Query 3 ===
+Error: cannot find directive `@defer` in this document
+    ╭─[ crates/graphql-project/tests/fixtures/apollo_client_directives.tsx:30:11 ]
+    │
+ 30 │       ... @defer(label: "posts") {
+    │           ───────────┬──────────  
+    │                      ╰──────────── directive not defined
+────╯

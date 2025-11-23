@@ -36,4 +36,5 @@ reqwest = { workspace = true }
 dashmap = { workspace = true }
 
 [dev-dependencies]
+insta = { version = "1.44.1", features = ["yaml"] }
 tempfile = "3.0"

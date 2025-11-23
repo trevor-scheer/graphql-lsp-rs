@@ -6,6 +6,7 @@ use std::sync::{Arc, RwLock};
 /// Main project structure that manages schema, documents, and validation
 pub struct GraphQLProject {
     config: ProjectConfig,
+    base_dir: Option<std::path::PathBuf>,
     schema: Arc<RwLock<Option<String>>>,
     schema_index: Arc<RwLock<SchemaIndex>>,
     document_index: Arc<RwLock<DocumentIndex>>,
@@ -17,10 +18,18 @@ impl GraphQLProject {
     pub fn new(config: ProjectConfig) -> Self {
         Self {
             config,
+            base_dir: None,
             schema: Arc::new(RwLock::new(None)),
             schema_index: Arc::new(RwLock::new(SchemaIndex::new())),
             document_index: Arc::new(RwLock::new(DocumentIndex::new())),
         }
+    }
+
+    /// Create a new project with a base directory for resolving relative paths
+    #[must_use]
+    pub fn with_base_dir(mut self, base_dir: std::path::PathBuf) -> Self {
+        self.base_dir = Some(base_dir);
+        self
     }
 
     /// Create projects from GraphQL config (single or multi-project)
@@ -29,6 +38,21 @@ impl GraphQLProject {
 
         for (name, project_config) in config.projects() {
             let project = Self::new(project_config.clone());
+            projects.push((name.to_string(), project));
+        }
+
+        Ok(projects)
+    }
+
+    /// Create projects from GraphQL config with a base directory
+    pub fn from_config_with_base(
+        config: &GraphQLConfig,
+        base_dir: &std::path::Path,
+    ) -> Result<Vec<(String, Self)>> {
+        let mut projects = Vec::new();
+
+        for (name, project_config) in config.projects() {
+            let project = Self::new(project_config.clone()).with_base_dir(base_dir.to_path_buf());
             projects.push((name.to_string(), project));
         }
 
@@ -64,7 +88,13 @@ impl GraphQLProject {
             return Ok(());
         };
 
-        let loader = DocumentLoader::new(documents_config.clone());
+        let mut loader = DocumentLoader::new(documents_config.clone());
+
+        // Set base path if we have one
+        if let Some(ref base_dir) = self.base_dir {
+            loader = loader.with_base_path(base_dir);
+        }
+
         let index = loader.load()?;
 
         // Update document index
@@ -87,6 +117,21 @@ impl GraphQLProject {
         let schema_index = self.schema_index.read().unwrap();
         let validator = Validator::new();
         validator.validate_document(document, &schema_index)
+    }
+
+    /// Validate a document with file location information for accurate diagnostics
+    ///
+    /// This method adjusts the source to include line offsets, making apollo-compiler's
+    /// diagnostics show the correct file name and line numbers.
+    pub fn validate_document_with_location(
+        &self,
+        document: &str,
+        file_name: &str,
+        line_offset: usize,
+    ) -> std::result::Result<(), DiagnosticList> {
+        let schema_index = self.schema_index.read().unwrap();
+        let validator = Validator::new();
+        validator.validate_document_with_location(document, &schema_index, file_name, line_offset)
     }
 
     /// Get the schema index for advanced operations

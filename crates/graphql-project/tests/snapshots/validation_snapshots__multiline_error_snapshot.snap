@@ -1,0 +1,36 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: type `Post` does not have a field `invalidField1`
+    ╭─[ crates/graphql-project/tests/multiline.graphql:8:7 ]
+    │
+  8 │       invalidField1
+    │       ──────┬──────  
+    │             ╰──────── field `invalidField1` selected here
+    │
+    ├─[ schema.graphql:23:6 ]
+    │
+ 23 │ type Post {
+    │      ──┬─  
+    │        ╰─── type `Post` defined here
+    │ 
+    │ Note: path to the field: `query GetUser → user → posts → invalidField1`
+────╯
+
+
+Error: type `Post` does not have a field `invalidField2`
+    ╭─[ crates/graphql-project/tests/multiline.graphql:10:7 ]
+    │
+ 10 │       invalidField2
+    │       ──────┬──────  
+    │             ╰──────── field `invalidField2` selected here
+    │
+    ├─[ schema.graphql:23:6 ]
+    │
+ 23 │ type Post {
+    │      ──┬─  
+    │        ╰─── type `Post` defined here
+    │ 
+    │ Note: path to the field: `query GetUser → user → posts → invalidField2`
+────╯

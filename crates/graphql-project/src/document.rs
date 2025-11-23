@@ -53,26 +53,54 @@ impl DocumentLoader {
 
     /// Find files matching a glob pattern
     fn find_files(&self, pattern: &str) -> Result<Vec<PathBuf>> {
-        let pattern = self.base_path.as_ref().map_or_else(
-            || pattern.to_string(),
-            |base| base.join(pattern).display().to_string(),
-        );
+        // Expand brace patterns like {ts,tsx} since glob crate doesn't support them
+        let expanded_patterns = Self::expand_braces(pattern);
 
         let mut files = Vec::new();
 
-        for entry in glob::glob(&pattern)
-            .map_err(|e| ProjectError::DocumentLoad(format!("Invalid glob pattern: {e}")))?
-        {
-            match entry {
-                Ok(path) if path.is_file() => files.push(path),
-                Ok(_) => {} // Skip directories
-                Err(e) => {
-                    return Err(ProjectError::DocumentLoad(format!("Glob error: {e}")));
+        for expanded_pattern in expanded_patterns {
+            let full_pattern = self.base_path.as_ref().map_or_else(
+                || expanded_pattern.clone(),
+                |base| base.join(&expanded_pattern).display().to_string(),
+            );
+
+            for entry in glob::glob(&full_pattern)
+                .map_err(|e| ProjectError::DocumentLoad(format!("Invalid glob pattern: {e}")))?
+            {
+                match entry {
+                    Ok(path) if path.is_file() => {
+                        if !files.contains(&path) {
+                            files.push(path);
+                        }
+                    }
+                    Ok(_) => {} // Skip directories
+                    Err(e) => {
+                        return Err(ProjectError::DocumentLoad(format!("Glob error: {e}")));
+                    }
                 }
             }
         }
 
         Ok(files)
+    }
+
+    /// Expand brace patterns like {ts,tsx} into multiple patterns
+    fn expand_braces(pattern: &str) -> Vec<String> {
+        // Simple brace expansion for patterns like **/*.{ts,tsx}
+        if let Some(start) = pattern.find('{') {
+            if let Some(end) = pattern.find('}') {
+                let before = &pattern[..start];
+                let after = &pattern[end + 1..];
+                let options = &pattern[start + 1..end];
+
+                return options
+                    .split(',')
+                    .map(|opt| format!("{before}{opt}{after}"))
+                    .collect();
+            }
+        }
+
+        vec![pattern.to_string()]
     }
 
     /// Load a single file and add operations/fragments to the index

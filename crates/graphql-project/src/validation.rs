@@ -33,13 +33,27 @@ impl Validator {
         document: &str,
         schema_index: &SchemaIndex,
     ) -> Result<(), DiagnosticList> {
+        self.validate_document_with_name(document, schema_index, "document.graphql")
+    }
+
+    /// Validate a document string with a custom file name and optional line offset
+    ///
+    /// This allows the diagnostics to show the correct file name and line numbers.
+    /// The `line_offset` parameter adds blank lines before the document to adjust
+    /// line numbers in diagnostics.
+    pub fn validate_document_with_name(
+        &self,
+        document: &str,
+        schema_index: &SchemaIndex,
+        file_name: &str,
+    ) -> Result<(), DiagnosticList> {
         // Get the underlying apollo-compiler Schema
         let schema = schema_index.schema();
         // Wrap in Valid since we assume the schema has been validated
         let valid_schema = Valid::assume_valid_ref(schema);
 
         // Parse and validate the document against the schema
-        match ExecutableDocument::parse_and_validate(valid_schema, document, "document.graphql") {
+        match ExecutableDocument::parse_and_validate(valid_schema, document, file_name) {
             Ok(_valid_doc) => {
                 // Document is fully valid
                 Ok(())
@@ -49,6 +63,27 @@ impl Validator {
                 Err(with_errors.errors)
             }
         }
+    }
+
+    /// Validate a document with adjusted source to match file line numbers
+    ///
+    /// Prepends newlines to the document so diagnostics show correct line numbers.
+    /// The `line_offset` is 0-indexed (0 means document starts on line 1).
+    pub fn validate_document_with_location(
+        &self,
+        document: &str,
+        schema_index: &SchemaIndex,
+        file_name: &str,
+        line_offset: usize,
+    ) -> Result<(), DiagnosticList> {
+        // Prepend newlines to adjust line numbers in diagnostics
+        let adjusted_source = if line_offset > 0 {
+            format!("{}{}", "\n".repeat(line_offset), document)
+        } else {
+            document.to_string()
+        };
+
+        self.validate_document_with_name(&adjusted_source, schema_index, file_name)
     }
 
     /// Validate a document that's already been parsed

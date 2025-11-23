@@ -1,0 +1,36 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: type `User` does not have a field `invalidField`
+    ╭─[ crates/graphql-project/tests/fixtures/invalid_field.graphql:5:5 ]
+    │
+  5 │     invalidField
+    │     ──────┬─────  
+    │           ╰─────── field `invalidField` selected here
+    │
+    ├─[ schema.graphql:15:6 ]
+    │
+ 15 │ type User {
+    │      ──┬─  
+    │        ╰─── type `User` defined here
+    │ 
+    │ Note: path to the field: `query GetUser → user → invalidField`
+────╯
+
+
+Error: type `User` does not have a field `anotherInvalidField`
+    ╭─[ crates/graphql-project/tests/fixtures/invalid_field.graphql:6:5 ]
+    │
+  6 │     anotherInvalidField
+    │     ─────────┬─────────  
+    │              ╰─────────── field `anotherInvalidField` selected here
+    │
+    ├─[ schema.graphql:15:6 ]
+    │
+ 15 │ type User {
+    │      ──┬─  
+    │        ╰─── type `User` defined here
+    │ 
+    │ Note: path to the field: `query GetUser → user → anotherInvalidField`
+────╯

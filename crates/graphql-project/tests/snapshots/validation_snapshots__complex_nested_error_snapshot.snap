@@ -1,0 +1,53 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: type `User` does not have a field `invalidField`
+    ╭─[ crates/graphql-project/tests/complex.graphql:6:5 ]
+    │
+  6 │     invalidField
+    │     ──────┬─────  
+    │           ╰─────── field `invalidField` selected here
+    │
+    ├─[ schema.graphql:15:6 ]
+    │
+ 15 │ type User {
+    │      ──┬─  
+    │        ╰─── type `User` defined here
+    │ 
+    │ Note: path to the field: `query ComplexQuery → user → invalidField`
+────╯
+
+
+Error: type `User` does not have a field `anotherInvalidField`
+    ╭─[ crates/graphql-project/tests/complex.graphql:12:9 ]
+    │
+ 12 │         anotherInvalidField
+    │         ─────────┬─────────  
+    │                  ╰─────────── field `anotherInvalidField` selected here
+    │
+    ├─[ schema.graphql:15:6 ]
+    │
+ 15 │ type User {
+    │      ──┬─  
+    │        ╰─── type `User` defined here
+    │ 
+    │ Note: path to the field: `query ComplexQuery → user → posts → author → anotherInvalidField`
+────╯
+
+
+Error: type `Post` does not have a field `nonExistentField`
+    ╭─[ crates/graphql-project/tests/complex.graphql:18:5 ]
+    │
+ 18 │     nonExistentField
+    │     ────────┬───────  
+    │             ╰───────── field `nonExistentField` selected here
+    │
+    ├─[ schema.graphql:23:6 ]
+    │
+ 23 │ type Post {
+    │      ──┬─  
+    │        ╰─── type `Post` defined here
+    │ 
+    │ Note: path to the field: `query ComplexQuery → post → nonExistentField`
+────╯

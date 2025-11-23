@@ -134,15 +134,7 @@ fn extract_from_js_family(
 
     // Create visitor to collect GraphQL
     let mut visitor = GraphQLVisitor::new(source, config);
-    eprintln!(
-        "DEBUG: Starting visit_with on module with {} items",
-        module.body.len()
-    );
     module.visit_with(&mut visitor);
-    eprintln!(
-        "DEBUG: After visit_with, extracted {} items",
-        visitor.extracted.len()
-    );
 
     Ok(visitor.extracted)
 }
@@ -230,11 +222,9 @@ impl swc_core::ecma::visit::Visit for GraphQLVisitor<'_> {
     fn visit_import_decl(&mut self, import: &swc_core::ecma::ast::ImportDecl) {
         use swc_core::ecma::visit::VisitWith;
         let module_source = String::from_utf8_lossy(import.src.value.as_bytes()).to_string();
-        eprintln!("DEBUG: Visiting import from module: {module_source}");
 
         // Only track imports from configured modules
         if self.config.modules.contains(&module_source) {
-            eprintln!("DEBUG: Module IS in configured modules list");
             for specifier in &import.specifiers {
                 use swc_core::ecma::ast::ImportSpecifier;
                 match specifier {
@@ -256,8 +246,6 @@ impl swc_core::ecma::visit::Visit for GraphQLVisitor<'_> {
                     }
                 }
             }
-        } else {
-            eprintln!("DEBUG: Module not in configured modules list");
         }
 
         // Continue traversal into child nodes
@@ -268,7 +256,6 @@ impl swc_core::ecma::visit::Visit for GraphQLVisitor<'_> {
     fn visit_tagged_tpl(&mut self, tagged: &swc_core::ecma::ast::TaggedTpl) {
         use swc_core::ecma::ast::Expr;
         use swc_core::ecma::visit::VisitWith;
-        eprintln!("DEBUG: Visiting tagged template");
         // Extract tag identifier
         let tag_name = match &*tagged.tag {
             Expr::Ident(ident) => String::from_utf8_lossy(ident.sym.as_bytes()).to_string(),

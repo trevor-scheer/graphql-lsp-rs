@@ -1,0 +1,14 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: variable `$id` of type `String!` cannot be used for argument `id` of type `ID!`
+   ╭─[ crates/graphql-project/tests/type_mismatch.graphql:3:8 ]
+   │
+ 2 │ query GetUser($id: String!) {
+   │               ──────┬─────  
+   │                     ╰─────── variable `$id` of type `String!` is declared here
+ 3 │   user(id: $id) {
+   │        ───┬───  
+   │           ╰───── variable `$id` used here
+───╯

@@ -1,0 +1,11 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: cannot find fragment `UndefinedFragment` in this document
+   ╭─[ crates/graphql-project/tests/undefined_fragment.graphql:4:5 ]
+   │
+ 4 │     ...UndefinedFragment
+   │     ──────────┬─────────  
+   │               ╰─────────── fragment `UndefinedFragment` is not defined
+───╯

@@ -1,0 +1,14 @@
+query GetUser {
+  user {
+    id
+    name
+    email
+  }
+}
+
+query GetPost {
+  post {
+    id
+    title
+  }
+}

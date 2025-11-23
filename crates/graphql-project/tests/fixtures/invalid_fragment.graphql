@@ -1,0 +1,11 @@
+fragment UserFields on InvalidType {
+  id
+  name
+  email
+}
+
+query GetUser($id: ID!) {
+  user(id: $id) {
+    ...UserFields
+  }
+}

@@ -1,0 +1,36 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: the required argument `Query.user(id:)` is not provided
+   ╭─[ crates/graphql-project/tests/fixtures/missing_argument.graphql:2:3 ]
+   │
+ 2 │ ╭─▶   user {
+   ┆ ┆   
+ 6 │ ├─▶   }
+   │ │         
+   │ ╰───────── missing value for argument `id`
+   │
+   ├─[ schema.graphql:2:8 ]
+   │
+ 2 │   user(id: ID!): User
+   │        ───┬───  
+   │           ╰───── argument defined here
+───╯
+
+
+Error: the required argument `Query.post(id:)` is not provided
+    ╭─[ crates/graphql-project/tests/fixtures/missing_argument.graphql:10:3 ]
+    │
+ 10 │ ╭─▶   post {
+    ┆ ┆   
+ 13 │ ├─▶   }
+    │ │         
+    │ ╰───────── missing value for argument `id`
+    │
+    ├─[ schema.graphql:4:8 ]
+    │
+  4 │   post(id: ID!): Post
+    │        ───┬───  
+    │           ╰───── argument defined here
+────╯

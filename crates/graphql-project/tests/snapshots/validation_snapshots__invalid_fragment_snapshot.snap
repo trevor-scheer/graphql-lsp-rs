@@ -1,0 +1,20 @@
+---
+source: crates/graphql-project/tests/validation_snapshots.rs
+expression: format_diagnostics(&diagnostics)
+---
+Error: type condition `InvalidType` of fragment `UserFields` is not a type defined in the schema
+   ╭─[ crates/graphql-project/tests/fixtures/invalid_fragment.graphql:1:24 ]
+   │
+ 1 │ fragment UserFields on InvalidType {
+   │                        ─────┬─────  
+   │                             ╰─────── type condition here
+───╯
+
+
+Error: cannot find fragment `UserFields` in this document
+   ╭─[ crates/graphql-project/tests/fixtures/invalid_fragment.graphql:9:5 ]
+   │
+ 9 │     ...UserFields
+   │     ──────┬──────  
+   │           ╰──────── fragment `UserFields` is not defined
+───╯
