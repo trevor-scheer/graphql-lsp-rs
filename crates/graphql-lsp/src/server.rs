@@ -200,9 +200,23 @@ impl GraphQLLanguageServer {
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
         // Write content to a temp file for extraction
-        // graphql-extract needs a file path to parse
+        // graphql-extract needs a file path to parse, and it checks the file extension
         use std::io::Write;
-        let temp_file = match tempfile::NamedTempFile::new() {
+
+        // Get the file extension from the original URI to preserve it in the temp file
+        let extension = uri
+            .to_file_path()
+            .and_then(|path| {
+                path.extension()
+                    .and_then(|ext| ext.to_str())
+                    .map(String::from)
+            })
+            .unwrap_or_else(|| "tsx".to_string());
+
+        let temp_file = match tempfile::Builder::new()
+            .suffix(&format!(".{extension}"))
+            .tempfile()
+        {
             Ok(mut file) => {
                 if file.write_all(content.as_bytes()).is_err() {
                     return vec![];
