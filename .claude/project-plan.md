@@ -66,13 +66,22 @@ We have built a working GraphQL LSP server with VS Code extension that provides 
 ### Test Results
 
 ```
-✅ 84 tests passing (total across all crates)
+✅ 88 tests passing (total across all crates)
 ✅ 0 clippy warnings
 ✅ All formatting checks pass
 🚫 0 test failures
 ```
 
-### Recent Fixes (Latest PR)
+### Recent Features (Latest PR #8)
+
+**Deprecated Field Warnings** - Comprehensive detection and reporting of `@deprecated` field usage
+1. **Core Validation** - Added `check_deprecated_fields_custom()` method for CST-based deprecation detection
+2. **Schema Indexing** - Extract deprecation reasons from `@deprecated(reason: "...")` directives
+3. **CLI Integration** - Display warnings before errors in yellow, with accurate source locations
+4. **LSP Integration** - Send deprecation warnings as LSP diagnostics with WARNING severity
+5. **Test Coverage** - 4 new tests for deprecated field detection (basic, multiple, nested, no false positives)
+
+### Previous Fixes
 
 1. **Config Integration** - Full GraphQL config loading in LSP
 2. **TypeScript Extraction** - Proper temp file extensions for graphql-extract
@@ -200,13 +209,15 @@ pub fn find_config(start_dir: &Path) -> Result<Option<PathBuf>, IoError>;
 #### C. Validation Engine ✅
 - ✅ Validate documents against schema using apollo-compiler
 - ✅ Full GraphQL spec validation
-- ✅ Structured diagnostics with severity levels
+- ✅ Deprecated field usage warnings (`@deprecated` directive)
+- ✅ Structured diagnostics with severity levels (error, warning)
 - ✅ Accurate source locations
 - ⏳ Custom validation rules (future)
 
 #### D. Indexing & Caching ✅
 - ✅ Fast type lookups (HashMap-based, O(1))
 - ✅ Field definitions with arguments and types
+- ✅ Deprecation reason extraction from directives
 - ✅ Interface and union type tracking
 - ✅ Enum values indexing
 - ✅ Directive definitions
@@ -253,7 +264,7 @@ pub enum Severity {
 
 ### 4. graphql-cli (Command-Line Tool) ✅ COMPLETE (Phase 1)
 
-**Status**: Basic validation commands working
+**Status**: Basic validation commands working with warnings support
 
 **Implemented Commands**:
 ```bash
@@ -280,9 +291,11 @@ pub enum Severity {
 ```
 
 **Features**:
-- ✅ Colored terminal output
-- ✅ Exit codes for CI integration
-- ⏳ JSON output mode for tooling (future)
+- ✅ Colored terminal output (yellow warnings, red errors)
+- ✅ Warnings displayed before errors for better visibility
+- ✅ Deprecated field detection and reporting
+- ✅ Exit codes for CI integration (0 if only warnings, 1 if errors)
+- ✅ JSON output mode for tooling
 - ⏳ Watch mode for development (future)
 - ⏳ Parallel validation for multi-project configs (future)
 
@@ -298,7 +311,8 @@ pub enum Severity {
 - ✅ Real-time validation
 - ✅ Syntax errors
 - ✅ Schema validation errors
-- ✅ Push diagnostics to client
+- ✅ Deprecated field warnings (with `@deprecated` directive support)
+- ✅ Push diagnostics to client with appropriate severity levels
 - ✅ Multi-workspace support
 - ✅ GraphQL config integration
 - ✅ TypeScript/JavaScript extraction
