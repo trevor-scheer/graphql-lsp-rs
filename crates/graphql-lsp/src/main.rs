@@ -9,6 +9,7 @@ async fn main() {
     // All logs MUST go to stderr to avoid breaking the protocol
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
+        .with_ansi(false) // Disable ANSI colors since LSP output doesn't support them
         .init();
 
     let stdin = tokio::io::stdin();
