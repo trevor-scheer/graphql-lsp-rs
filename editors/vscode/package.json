@@ -29,6 +29,13 @@
         "configuration": "./language-configuration.json"
       }
     ],
+    "grammars": [
+      {
+        "language": "graphql",
+        "scopeName": "source.graphql",
+        "path": "./syntaxes/graphql.tmLanguage.json"
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "GraphQL LSP",
