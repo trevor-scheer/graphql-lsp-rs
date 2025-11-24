@@ -34,6 +34,19 @@
         "language": "graphql",
         "scopeName": "source.graphql",
         "path": "./syntaxes/graphql.tmLanguage.json"
+      },
+      {
+        "scopeName": "inline.graphql",
+        "path": "./syntaxes/graphql.injection.tmLanguage.json",
+        "injectTo": [
+          "source.js",
+          "source.ts",
+          "source.jsx",
+          "source.tsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.graphql": "graphql"
+        }
       }
     ],
     "configuration": {

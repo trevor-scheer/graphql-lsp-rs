@@ -1,0 +1,62 @@
+{
+  "scopeName": "inline.graphql",
+  "injectionSelector": "L:source.js -comment -string, L:source.jsx -comment -string, L:source.ts -comment -string, L:source.tsx -comment -string",
+  "patterns": [
+    {
+      "include": "#graphql-template-literal"
+    }
+  ],
+  "repository": {
+    "graphql-template-literal": {
+      "patterns": [
+        {
+          "name": "meta.embedded.block.graphql",
+          "begin": "(?x)\n  (gql|graphql|gqltag)\\s*\n  (`)",
+          "beginCaptures": {
+            "1": {
+              "name": "entity.name.function.tagged-template.js"
+            },
+            "2": {
+              "name": "punctuation.definition.string.template.begin.js"
+            }
+          },
+          "end": "`",
+          "endCaptures": {
+            "0": {
+              "name": "punctuation.definition.string.template.end.js"
+            }
+          },
+          "patterns": [
+            {
+              "include": "#template-substitution-element"
+            },
+            {
+              "include": "source.graphql"
+            }
+          ]
+        }
+      ]
+    },
+    "template-substitution-element": {
+      "name": "meta.template.expression.js",
+      "begin": "\\$\\{",
+      "beginCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.begin.js"
+        }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": {
+          "name": "punctuation.definition.template-expression.end.js"
+        }
+      },
+      "patterns": [
+        {
+          "include": "source.ts#expression"
+        }
+      ],
+      "contentName": "meta.embedded.line.ts"
+    }
+  }
+}

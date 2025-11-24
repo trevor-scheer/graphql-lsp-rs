@@ -194,7 +194,9 @@ impl GraphQLProject {
                 }
 
                 // Also try glob pattern matching
-                if let (Some(full_str), Ok(pattern)) = (full_path.to_str(), Pattern::new(normalized_pattern)) {
+                if let (Some(full_str), Ok(pattern)) =
+                    (full_path.to_str(), Pattern::new(normalized_pattern))
+                {
                     if pattern.matches(file_str) {
                         return true;
                     }
