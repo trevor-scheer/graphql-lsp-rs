@@ -156,6 +156,69 @@ impl GraphQLProject {
             fragments: index.fragments.clone(),
         }
     }
+
+    /// Check if a file path matches the schema configuration
+    ///
+    /// This is used by the LSP to determine if a file should be validated
+    /// as a schema file (type definitions) or as a document (executable operations).
+    #[must_use]
+    pub fn is_schema_file(&self, file_path: &std::path::Path) -> bool {
+        use glob::Pattern;
+
+        let schema_patterns = self.config.schema.paths();
+
+        // Get the file path as a string for matching
+        let Some(file_str) = file_path.to_str() else {
+            return false;
+        };
+
+        // Check if file matches any schema pattern
+        for pattern_str in schema_patterns {
+            // Resolve the pattern to an absolute path if we have a base_dir
+            if let Some(ref base) = self.base_dir {
+                // Normalize the pattern by stripping leading ./ if present
+                let normalized_pattern = pattern_str.strip_prefix("./").unwrap_or(pattern_str);
+
+                // Join with base directory to get absolute path
+                let full_path = base.join(normalized_pattern);
+
+                // Canonicalize both paths if possible for comparison
+                let canonical_full = full_path.canonicalize().ok();
+                let canonical_file = file_path.canonicalize().ok();
+
+                // Try exact match with canonicalized paths
+                if let (Some(ref full), Some(ref file)) = (&canonical_full, &canonical_file) {
+                    if full == file {
+                        return true;
+                    }
+                }
+
+                // Also try glob pattern matching
+                if let (Some(full_str), Ok(pattern)) =
+                    (full_path.to_str(), Pattern::new(normalized_pattern))
+                {
+                    if pattern.matches(file_str) {
+                        return true;
+                    }
+                    // Try matching against the full resolved path
+                    if let Ok(full_pattern) = Pattern::new(full_str) {
+                        if full_pattern.matches(file_str) {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                // No base directory, try matching against the pattern directly
+                if let Ok(pattern) = Pattern::new(pattern_str) {
+                    if pattern.matches(file_str) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
+    }
 }
 
 #[cfg(test)]

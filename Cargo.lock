@@ -794,12 +794,15 @@ name = "graphql-lsp"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "apollo-compiler",
  "dashmap 5.5.3",
  "graphql-config",
+ "graphql-extract",
  "graphql-project",
  "lsp-types",
  "serde",
  "serde_json",
+ "tempfile",
  "thiserror 1.0.69",
  "tokio",
  "tower-lsp-server",

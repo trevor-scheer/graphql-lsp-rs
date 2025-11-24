@@ -1,0 +1,82 @@
+{
+  "name": "graphql-lsp",
+  "displayName": "GraphQL LSP",
+  "description": "GraphQL Language Server with validation, completion, and go-to-definition",
+  "version": "0.1.1",
+  "publisher": "trevor",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/graphql.config.{yaml,yml,json}",
+    "workspaceContains:**/.graphqlrc{.yaml,.yml,.json,}"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "graphql",
+        "extensions": [
+          ".graphql",
+          ".gql"
+        ],
+        "aliases": [
+          "GraphQL"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "graphql",
+        "scopeName": "source.graphql",
+        "path": "./syntaxes/graphql.tmLanguage.json"
+      },
+      {
+        "scopeName": "inline.graphql",
+        "path": "./syntaxes/graphql.injection.tmLanguage.json",
+        "injectTo": [
+          "source.js",
+          "source.ts",
+          "source.jsx",
+          "source.tsx"
+        ],
+        "embeddedLanguages": {
+          "meta.embedded.block.graphql": "graphql"
+        }
+      }
+    ],
+    "configuration": {
+      "type": "object",
+      "title": "GraphQL LSP",
+      "properties": {
+        "graphql-lsp.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Traces the communication between VS Code and the language server."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,26 @@
+query GetUser($id: ID!) {
+  user(id: $id) {
+    id
+    name
+    posts {
+      id
+      title
+      content
+    }
+  }
+}
+
+# This query has errors - it references fields that don't exist in the schema
+query InvalidQuery($id: ID!) {
+  user(id: $id) {
+    id
+    name
+    invalidField
+    email
+    posts {
+      id
+      title
+      anotherInvalidField
+    }
+  }
+}
