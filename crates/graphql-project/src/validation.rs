@@ -760,7 +760,7 @@ mod tests {
         let schema = create_test_schema();
 
         // When a document has both fragments and operations, normal validation applies
-        let document = r#"
+        let document = r"
             fragment UserFields on User {
                 id
                 name
@@ -772,7 +772,7 @@ mod tests {
                     ...UserFields
                 }
             }
-        "#;
+        ";
 
         let result = validator.validate_document(document, &schema);
         assert!(result.is_ok(), "Should validate normally with operations");
