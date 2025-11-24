@@ -54,7 +54,7 @@ impl GraphQLLanguageServer {
                             Ok(projects) => {
                                 tracing::info!("Loaded {} GraphQL project(s)", projects.len());
 
-                                // Load schemas for all projects
+                                // Load schemas and documents for all projects
                                 for (name, project) in &projects {
                                     if let Err(e) = project.load_schema().await {
                                         tracing::error!(
@@ -68,6 +68,27 @@ impl GraphQLLanguageServer {
                                             .await;
                                     } else {
                                         tracing::info!("Loaded schema for project '{}'", name);
+                                    }
+
+                                    // Load documents to index all fragments
+                                    if let Err(e) = project.load_documents() {
+                                        tracing::error!(
+                                            "Failed to load documents for project '{name}': {e}"
+                                        );
+                                        self.client
+                                            .log_message(
+                                                MessageType::WARNING,
+                                                format!("Failed to load documents for project '{name}': {e}"),
+                                            )
+                                            .await;
+                                    } else {
+                                        let doc_index = project.get_document_index();
+                                        tracing::info!(
+                                            "Loaded documents for project '{}': {} operations, {} fragments",
+                                            name,
+                                            doc_index.operations.len(),
+                                            doc_index.fragments.len()
+                                        );
                                     }
                                 }
 
@@ -198,7 +219,90 @@ impl GraphQLLanguageServer {
         content: &str,
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
-        let mut diagnostics = match project.validate_document(content) {
+        // Skip validation if this is a fragment-only document
+        // Fragments are validated in the context of operations
+        if content.trim_start().starts_with("fragment")
+            && !content.contains("query")
+            && !content.contains("mutation")
+            && !content.contains("subscription")
+        {
+            return vec![];
+        }
+
+        // Collect all fragments from the project (same approach as CLI)
+        let document_index = project.get_document_index();
+        let mut all_fragments = Vec::new();
+        let mut fragment_file_paths = std::collections::HashSet::new();
+
+        for frag_info in document_index.fragments.values() {
+            fragment_file_paths.insert(&frag_info.file_path);
+        }
+
+        // Extract all fragment sources
+        for frag_path in fragment_file_paths {
+            if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+                std::path::Path::new(frag_path),
+                &ExtractConfig::default(),
+            ) {
+                for frag_item in frag_extracted {
+                    if frag_item.source.trim_start().starts_with("fragment") {
+                        all_fragments.push(frag_item.source);
+                    }
+                }
+            }
+        }
+
+        // Find all fragment spreads recursively (fragments can reference other fragments)
+        let mut referenced_fragments = std::collections::HashSet::new();
+        let mut to_process = vec![content.to_string()];
+
+        while let Some(doc) = to_process.pop() {
+            for line in doc.lines() {
+                let trimmed = line.trim();
+                if let Some(stripped) = trimmed.strip_prefix("...") {
+                    // Extract fragment name (everything after ... until whitespace or special char)
+                    let frag_name = stripped
+                        .split(|c: char| c.is_whitespace() || c == '@')
+                        .next()
+                        .unwrap_or("");
+                    if !frag_name.is_empty() && !referenced_fragments.contains(frag_name) {
+                        referenced_fragments.insert(frag_name.to_string());
+
+                        // Find and queue the fragment definition for processing
+                        if let Some(frag_def) = all_fragments
+                            .iter()
+                            .find(|f| f.contains(&format!("fragment {frag_name}")))
+                        {
+                            to_process.push(frag_def.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        // Collect all referenced fragments
+        let relevant_fragments: Vec<&String> = all_fragments
+            .iter()
+            .filter(|frag| {
+                referenced_fragments
+                    .iter()
+                    .any(|name| frag.contains(&format!("fragment {name}")))
+            })
+            .collect();
+
+        // Combine the operation with all referenced fragments (including transitive dependencies)
+        let combined_source = if relevant_fragments.is_empty() {
+            content.to_string()
+        } else {
+            let fragments_str = relevant_fragments
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join("\n\n");
+            format!("{content}\n\n{fragments_str}")
+        };
+
+        let mut diagnostics = match project.validate_document(&combined_source) {
             Ok(()) => vec![],
             Err(diagnostic_list) => self.convert_diagnostics(&diagnostic_list),
         };
@@ -207,7 +311,7 @@ impl GraphQLLanguageServer {
         let validator = graphql_project::Validator::new();
         let schema_index = project.get_schema_index();
         let deprecation_warnings =
-            validator.check_deprecated_fields_custom(content, &schema_index, "document.graphql");
+            validator.check_deprecated_fields_custom(&combined_source, &schema_index, "document.graphql");
 
         // Convert deprecation warnings to LSP diagnostics
         for warning in deprecation_warnings {
@@ -289,14 +393,98 @@ impl GraphQLLanguageServer {
             uri
         );
 
+        // Collect all fragments from the project (same approach as CLI)
+        let document_index = project.get_document_index();
+        let mut all_fragments = Vec::new();
+        let mut fragment_file_paths = std::collections::HashSet::new();
+
+        for frag_info in document_index.fragments.values() {
+            fragment_file_paths.insert(&frag_info.file_path);
+        }
+
+        // Extract all fragment sources
+        for frag_path in fragment_file_paths {
+            if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+                std::path::Path::new(frag_path),
+                &ExtractConfig::default(),
+            ) {
+                for frag_item in frag_extracted {
+                    if frag_item.source.trim_start().starts_with("fragment") {
+                        all_fragments.push(frag_item.source);
+                    }
+                }
+            }
+        }
+
         let mut all_diagnostics = Vec::new();
 
         // Validate each extracted document
         for item in extracted {
             let line_offset = item.location.range.start.line;
+            let source = &item.source;
+
+            // Skip documents that only contain fragments
+            // Fragments are validated in the context of operations
+            if source.trim_start().starts_with("fragment")
+                && !source.contains("query")
+                && !source.contains("mutation")
+                && !source.contains("subscription")
+            {
+                continue;
+            }
+
+            // Find all fragment spreads recursively (fragments can reference other fragments)
+            let mut referenced_fragments = std::collections::HashSet::new();
+            let mut to_process = vec![source.clone()];
+
+            while let Some(doc) = to_process.pop() {
+                for line in doc.lines() {
+                    let trimmed = line.trim();
+                    if let Some(stripped) = trimmed.strip_prefix("...") {
+                        // Extract fragment name (everything after ... until whitespace or special char)
+                        let frag_name = stripped
+                            .split(|c: char| c.is_whitespace() || c == '@')
+                            .next()
+                            .unwrap_or("");
+                        if !frag_name.is_empty() && !referenced_fragments.contains(frag_name) {
+                            referenced_fragments.insert(frag_name.to_string());
+
+                            // Find and queue the fragment definition for processing
+                            if let Some(frag_def) = all_fragments
+                                .iter()
+                                .find(|f| f.contains(&format!("fragment {frag_name}")))
+                            {
+                                to_process.push(frag_def.clone());
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Collect all referenced fragments
+            let relevant_fragments: Vec<&String> = all_fragments
+                .iter()
+                .filter(|frag| {
+                    referenced_fragments
+                        .iter()
+                        .any(|name| frag.contains(&format!("fragment {name}")))
+                })
+                .collect();
+
+            // Combine the operation with all referenced fragments (including transitive dependencies)
+            let combined_source = if relevant_fragments.is_empty() {
+                source.clone()
+            } else {
+                let fragments_str = relevant_fragments
+                    .iter()
+                    .map(|s| s.as_str())
+                    .collect::<Vec<_>>()
+                    .join("\n\n");
+                format!("{source}\n\n{fragments_str}")
+            };
 
             match project.validate_document_with_location(
-                &item.source,
+                &combined_source,
                 &uri.to_string(),
                 line_offset,
             ) {
@@ -310,7 +498,7 @@ impl GraphQLLanguageServer {
             let validator = graphql_project::Validator::new();
             let schema_index = project.get_schema_index();
             let deprecation_warnings = validator.check_deprecated_fields_custom(
-                &item.source,
+                &combined_source,
                 &schema_index,
                 &uri.to_string(),
             );
