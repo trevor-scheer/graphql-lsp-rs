@@ -209,10 +209,24 @@ pub struct FieldInfo {
 
 impl FieldInfo {
     fn from_field_definition(field: &FieldDefinition) -> Self {
-        let deprecated = field.directives.get("deprecated").map(|_| {
-            // apollo-compiler doesn't give us easy access to directive arguments
-            // For now, just mark as deprecated without a reason
-            "No longer supported".to_string()
+        // Check if the field has a @deprecated directive
+        let deprecated = field.directives.get("deprecated").and_then(|directive| {
+            // Try to get the "reason" argument from the directive
+            // The directive has arguments stored as a Vec of Argument nodes
+            directive
+                .arguments
+                .iter()
+                .find(|arg| arg.name.as_str() == "reason")
+                .and_then(|arg| {
+                    // Extract string value from the argument
+                    // The value is a Node<apollo_compiler::ast::Value>
+                    if let apollo_compiler::ast::Value::String(reason_str) = arg.value.as_ref() {
+                        Some(reason_str.clone())
+                    } else {
+                        None
+                    }
+                })
+                .or_else(|| Some("No longer supported".to_string()))
         });
 
         let arguments = field

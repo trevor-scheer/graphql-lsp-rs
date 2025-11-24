@@ -192,19 +192,50 @@ impl GraphQLLanguageServer {
 
     /// Validate a pure GraphQL document
     #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     fn validate_graphql_document(
         &self,
         content: &str,
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
-        match project.validate_document(content) {
+        let mut diagnostics = match project.validate_document(content) {
             Ok(()) => vec![],
             Err(diagnostic_list) => self.convert_diagnostics(&diagnostic_list),
+        };
+
+        // Check for deprecated field usage
+        let validator = graphql_project::Validator::new();
+        let schema_index = project.get_schema_index();
+        let deprecation_warnings =
+            validator.check_deprecated_fields_custom(content, &schema_index, "document.graphql");
+
+        // Convert deprecation warnings to LSP diagnostics
+        for warning in deprecation_warnings {
+            diagnostics.push(Diagnostic {
+                range: Range {
+                    start: Position {
+                        line: warning.range.start.line as u32,
+                        character: warning.range.start.character as u32,
+                    },
+                    end: Position {
+                        line: warning.range.end.line as u32,
+                        character: warning.range.end.character as u32,
+                    },
+                },
+                severity: Some(DiagnosticSeverity::WARNING),
+                code: warning.code.map(lsp_types::NumberOrString::String),
+                source: Some(warning.source),
+                message: warning.message,
+                ..Default::default()
+            });
         }
+
+        diagnostics
     }
 
     /// Validate GraphQL embedded in TypeScript/JavaScript
     #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     fn validate_typescript_document(
         &self,
         uri: &Uri,
@@ -273,6 +304,36 @@ impl GraphQLLanguageServer {
                 Err(diagnostic_list) => {
                     all_diagnostics.extend(self.convert_diagnostics(&diagnostic_list));
                 }
+            }
+
+            // Check for deprecated field usage
+            let validator = graphql_project::Validator::new();
+            let schema_index = project.get_schema_index();
+            let deprecation_warnings = validator.check_deprecated_fields_custom(
+                &item.source,
+                &schema_index,
+                &uri.to_string(),
+            );
+
+            // Convert deprecation warnings to LSP diagnostics
+            for warning in deprecation_warnings {
+                all_diagnostics.push(Diagnostic {
+                    range: Range {
+                        start: Position {
+                            line: (line_offset + warning.range.start.line) as u32,
+                            character: warning.range.start.character as u32,
+                        },
+                        end: Position {
+                            line: (line_offset + warning.range.end.line) as u32,
+                            character: warning.range.end.character as u32,
+                        },
+                    },
+                    severity: Some(DiagnosticSeverity::WARNING),
+                    code: warning.code.map(lsp_types::NumberOrString::String),
+                    source: Some(warning.source),
+                    message: warning.message,
+                    ..Default::default()
+                });
             }
         }
 
