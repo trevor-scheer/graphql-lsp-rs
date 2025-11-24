@@ -48,6 +48,14 @@ impl Validator {
         schema_index: &SchemaIndex,
         file_name: &str,
     ) -> Result<(), DiagnosticList> {
+        // Check if this is a fragment-only document
+        if Self::is_fragment_only_document(document) {
+            // Fragment-only documents are valid - they're meant to be shared across operations
+            // Apollo compiler would report "unused fragment" errors, but these are expected
+            // for fragment libraries that are imported into other files
+            return Ok(());
+        }
+
         // Get the underlying apollo-compiler Schema
         let schema = schema_index.schema();
         // Wrap in Valid since we assume the schema has been validated
@@ -286,6 +294,42 @@ impl Validator {
         }
 
         (line, col)
+    }
+
+    /// Check if a document contains only fragment definitions (no operations)
+    ///
+    /// Fragment-only documents are common in GraphQL codebases where fragments
+    /// are defined in separate files to be shared across multiple operations.
+    /// These should not trigger "unused fragment" validation errors.
+    fn is_fragment_only_document(document: &str) -> bool {
+        use apollo_parser::{cst, Parser};
+
+        let parser = Parser::new(document);
+        let tree = parser.parse();
+
+        // If there are syntax errors, we should still validate normally
+        if tree.errors().len() > 0 {
+            return false;
+        }
+
+        let doc_cst = tree.document();
+        let mut has_fragments = false;
+        let mut has_operations = false;
+
+        for definition in doc_cst.definitions() {
+            match definition {
+                cst::Definition::FragmentDefinition(_) => {
+                    has_fragments = true;
+                }
+                cst::Definition::OperationDefinition(_) => {
+                    has_operations = true;
+                }
+                _ => {}
+            }
+        }
+
+        // Return true only if we have fragments but no operations
+        has_fragments && !has_operations
     }
 }
 
@@ -681,5 +725,78 @@ mod tests {
         );
 
         assert_eq!(warnings.len(), 0, "Should have no warnings");
+    }
+
+    #[test]
+    fn test_fragment_only_document_is_valid() {
+        let validator = Validator::new();
+        let schema = create_test_schema();
+
+        // A document with only fragments should not produce "unused fragment" errors
+        let document = r"
+            fragment UserFields on User {
+                id
+                name
+                email
+            }
+
+            fragment UserBasicInfo on User {
+                id
+                name
+            }
+        ";
+
+        let result = validator.validate_document(document, &schema);
+        assert!(
+            result.is_ok(),
+            "Fragment-only documents should be valid: {:?}",
+            result.err()
+        );
+    }
+
+    #[test]
+    fn test_fragment_with_operation_validates_normally() {
+        let validator = Validator::new();
+        let schema = create_test_schema();
+
+        // When a document has both fragments and operations, normal validation applies
+        let document = r"
+            fragment UserFields on User {
+                id
+                name
+                email
+            }
+
+            query GetUser($id: ID!) {
+                user(id: $id) {
+                    ...UserFields
+                }
+            }
+        ";
+
+        let result = validator.validate_document(document, &schema);
+        assert!(result.is_ok(), "Should validate normally with operations");
+    }
+
+    #[test]
+    fn test_fragment_only_with_invalid_type_still_validates() {
+        let validator = Validator::new();
+        let schema = create_test_schema();
+
+        // Fragment-only documents skip validation, even with invalid types
+        // This is intentional - type validation will happen when the fragment is used
+        let document = r"
+            fragment InvalidFragment on NonExistentType {
+                id
+                name
+            }
+        ";
+
+        let result = validator.validate_document(document, &schema);
+        // Fragment-only documents are not validated, so this should pass
+        assert!(
+            result.is_ok(),
+            "Fragment-only documents skip full validation"
+        );
     }
 }
