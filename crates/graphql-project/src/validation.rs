@@ -110,7 +110,7 @@ impl Validator {
     ///
     /// This is separate from the main validation flow because apollo-compiler's
     /// `DiagnosticList` is not easily extensible with custom warnings.
-    #[must_use] 
+    #[must_use]
     pub fn check_deprecated_fields_custom(
         &self,
         document: &str,
@@ -141,9 +141,11 @@ impl Validator {
                     Some(op_type) if op_type.mutation_token().is_some() => {
                         schema_index.schema().schema_definition.mutation.as_ref()
                     }
-                    Some(op_type) if op_type.subscription_token().is_some() => {
-                        schema_index.schema().schema_definition.subscription.as_ref()
-                    }
+                    Some(op_type) if op_type.subscription_token().is_some() => schema_index
+                        .schema()
+                        .schema_definition
+                        .subscription
+                        .as_ref(),
                     None => schema_index.schema().schema_definition.query.as_ref(),
                     _ => None,
                 };
@@ -173,8 +175,8 @@ impl Validator {
         warnings: &mut Vec<crate::Diagnostic>,
         document: &str,
     ) {
-        use apollo_parser::cst::{self, CstNode};
         use crate::{Diagnostic, Position, Range};
+        use apollo_parser::cst::{self, CstNode};
 
         for selection in selection_set.selections() {
             match selection {
@@ -204,9 +206,8 @@ impl Validator {
                                         },
                                     };
 
-                                    let message = format!(
-                                        "Field '{field_name_str}' is deprecated. {reason}"
-                                    );
+                                    let message =
+                                        format!("Field '{field_name_str}' is deprecated. {reason}");
 
                                     warnings.push(
                                         Diagnostic::warning(range, message)
@@ -241,11 +242,12 @@ impl Validator {
                     if let Some(selection_set) = inline_fragment.selection_set() {
                         // For inline fragments, use the type condition if present
                         // We need to extract it as a String to avoid lifetime issues
-                        let type_name_owned = inline_fragment.type_condition().and_then(|type_condition| {
-                            type_condition.named_type().and_then(|named_type| {
-                                named_type.name().map(|name| name.text().to_string())
-                            })
-                        });
+                        let type_name_owned =
+                            inline_fragment.type_condition().and_then(|type_condition| {
+                                type_condition.named_type().and_then(|named_type| {
+                                    named_type.name().map(|name| name.text().to_string())
+                                })
+                            });
 
                         let type_name_ref = type_name_owned.as_deref().unwrap_or(parent_type_name);
 

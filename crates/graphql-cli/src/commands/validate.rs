@@ -13,6 +13,16 @@ pub async fn run(
     format: OutputFormat,
     watch: bool,
 ) -> Result<()> {
+    // Define diagnostic output structure for collecting warnings and errors
+    struct DiagnosticOutput {
+        file_path: String,
+        line: usize,
+        column: usize,
+        end_line: usize,
+        end_column: usize,
+        message: String,
+    }
+
     if watch {
         println!("{}", "Watch mode not yet implemented".yellow());
         return Ok(());
@@ -139,11 +149,15 @@ pub async fn run(
             }
         }
 
+        // Collect all warnings and errors first, then display them
         // Collect unique file paths that contain operations
         let mut operation_file_paths = std::collections::HashSet::new();
         for op_info in document_index.operations.values() {
             operation_file_paths.insert(&op_info.file_path);
         }
+
+        let mut all_warnings = Vec::new();
+        let mut all_errors = Vec::new();
 
         // Validate each file containing operations
         for file_path in operation_file_paths {
@@ -239,148 +253,145 @@ pub async fn run(
                 // Validate with the actual file path and line offset
                 // This makes apollo-compiler's diagnostics show the correct file:line:column
                 let line_offset = item.location.range.start.line;
+
+                // Check for deprecation warnings (regardless of validation result)
+                let validator = graphql_project::Validator::new();
+                let schema_index = project.get_schema_index();
+                let deprecation_warnings = validator.check_deprecated_fields_custom(
+                    &combined_source,
+                    &schema_index,
+                    file_path,
+                );
+
+                for warning in deprecation_warnings {
+                    all_warnings.push(DiagnosticOutput {
+                        file_path: file_path.clone(),
+                        line: line_offset + warning.range.start.line + 1,
+                        column: warning.range.start.character + 1,
+                        end_line: line_offset + warning.range.end.line + 1,
+                        end_column: warning.range.end.character + 1,
+                        message: warning.message,
+                    });
+                }
+
                 let validation_result = project.validate_document_with_location(
                     &combined_source,
                     file_path,
                     line_offset,
                 );
 
-                match validation_result {
-                    Ok(()) => {
-                        // Valid document - check for deprecation warnings
-                        let validator = graphql_project::Validator::new();
-                        let schema_index = project.get_schema_index();
-                        let deprecation_warnings = validator.check_deprecated_fields_custom(
-                            &combined_source,
-                            &schema_index,
-                            file_path,
-                        );
-
-                        if !deprecation_warnings.is_empty() {
-                            for warning in deprecation_warnings {
-                                total_warnings += 1;
-
-                                match format {
-                                    OutputFormat::Human => {
-                                        println!(
-                                            "\n{}:{}:{}: {} {}",
-                                            file_path,
-                                            line_offset + warning.range.start.line + 1,
-                                            warning.range.start.character + 1,
-                                            "warning:".yellow().bold(),
-                                            warning.message.yellow()
-                                        );
-                                    }
-                                    OutputFormat::Json => {
-                                        println!(
-                                            "{}",
-                                            serde_json::json!({
-                                                "file": file_path,
-                                                "severity": "warning",
-                                                "message": warning.message,
-                                                "location": {
-                                                    "start": {
-                                                        "line": line_offset + warning.range.start.line + 1,
-                                                        "column": warning.range.start.character + 1
-                                                    },
-                                                    "end": {
-                                                        "line": line_offset + warning.range.end.line + 1,
-                                                        "column": warning.range.end.character + 1
-                                                    }
-                                                }
-                                            })
-                                        );
-                                    }
-                                }
-                            }
+                if let Err(diagnostics) = validation_result {
+                    // Found validation errors - collect them
+                    for diagnostic in diagnostics.iter() {
+                        if let Some(range) = diagnostic.line_column_range() {
+                            all_errors.push(DiagnosticOutput {
+                                file_path: file_path.clone(),
+                                line: range.start.line,
+                                column: range.start.column,
+                                end_line: range.end.line,
+                                end_column: range.end.column,
+                                message: format!("{}", diagnostic.error),
+                            });
+                        } else {
+                            // If no location available, still include the error
+                            all_errors.push(DiagnosticOutput {
+                                file_path: file_path.clone(),
+                                line: 0,
+                                column: 0,
+                                end_line: 0,
+                                end_column: 0,
+                                message: format!("{diagnostic}"),
+                            });
                         }
                     }
-                    Err(diagnostics) => {
-                        // Found validation errors - diagnostics already have correct file and line numbers
-                        for diagnostic in diagnostics.iter() {
-                            total_errors += 1;
+                }
+            }
+        }
 
-                            match format {
-                                OutputFormat::Human => {
-                                    // Just print the diagnostic - it already has the correct location
-                                    println!("\n{diagnostic}");
-                                }
-                                OutputFormat::Json => {
-                                    // For JSON output, extract location from diagnostic
-                                    let location = diagnostic.line_column_range().map(|range| {
-                                        serde_json::json!({
-                                            "start": {
-                                                "line": range.start.line,
-                                                "column": range.start.column
-                                            },
-                                            "end": {
-                                                "line": range.end.line,
-                                                "column": range.end.column
-                                            }
-                                        })
-                                    });
+        // Now display all warnings first, then all errors
+        total_warnings = all_warnings.len();
+        total_errors = all_errors.len();
 
-                                    println!(
-                                        "{}",
-                                        serde_json::json!({
-                                            "file": file_path,
-                                            "severity": "error",
-                                            "error": format!("{}", diagnostic.error),
-                                            "location": location
-                                        })
-                                    );
-                                }
-                            }
-                        }
+        match format {
+            OutputFormat::Human => {
+                // Print all warnings
+                for warning in &all_warnings {
+                    println!(
+                        "\n{}:{}:{}: {} {}",
+                        warning.file_path,
+                        warning.line,
+                        warning.column,
+                        "warning:".yellow().bold(),
+                        warning.message.yellow()
+                    );
+                }
 
-                        // Even if there are errors, check for deprecation warnings
-                        let validator = graphql_project::Validator::new();
-                        let schema_index = project.get_schema_index();
-                        let deprecation_warnings = validator.check_deprecated_fields_custom(
-                            &combined_source,
-                            &schema_index,
-                            file_path,
+                // Print all errors
+                for error in &all_errors {
+                    if error.line > 0 {
+                        println!(
+                            "\n{}:{}:{}: {} {}",
+                            error.file_path,
+                            error.line,
+                            error.column,
+                            "error:".red().bold(),
+                            error.message.red()
                         );
-
-                        if !deprecation_warnings.is_empty() {
-                            for warning in deprecation_warnings {
-                                total_warnings += 1;
-
-                                match format {
-                                    OutputFormat::Human => {
-                                        println!(
-                                            "\n{}:{}:{}: {} {}",
-                                            file_path,
-                                            line_offset + warning.range.start.line + 1,
-                                            warning.range.start.character + 1,
-                                            "warning:".yellow().bold(),
-                                            warning.message.yellow()
-                                        );
-                                    }
-                                    OutputFormat::Json => {
-                                        println!(
-                                            "{}",
-                                            serde_json::json!({
-                                                "file": file_path,
-                                                "severity": "warning",
-                                                "message": warning.message,
-                                                "location": {
-                                                    "start": {
-                                                        "line": line_offset + warning.range.start.line + 1,
-                                                        "column": warning.range.start.character + 1
-                                                    },
-                                                    "end": {
-                                                        "line": line_offset + warning.range.end.line + 1,
-                                                        "column": warning.range.end.character + 1
-                                                    }
-                                                }
-                                            })
-                                        );
-                                    }
+                    } else {
+                        // No location info
+                        println!("\n{}", error.message);
+                    }
+                }
+            }
+            OutputFormat::Json => {
+                // Print all warnings as JSON
+                for warning in &all_warnings {
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "file": warning.file_path,
+                            "severity": "warning",
+                            "message": warning.message,
+                            "location": {
+                                "start": {
+                                    "line": warning.line,
+                                    "column": warning.column
+                                },
+                                "end": {
+                                    "line": warning.end_line,
+                                    "column": warning.end_column
                                 }
                             }
-                        }
-                    }
+                        })
+                    );
+                }
+
+                // Print all errors as JSON
+                for error in &all_errors {
+                    let location = if error.line > 0 {
+                        Some(serde_json::json!({
+                            "start": {
+                                "line": error.line,
+                                "column": error.column
+                            },
+                            "end": {
+                                "line": error.end_line,
+                                "column": error.end_column
+                            }
+                        }))
+                    } else {
+                        None
+                    };
+
+                    println!(
+                        "{}",
+                        serde_json::json!({
+                            "file": error.file_path,
+                            "severity": "error",
+                            "message": error.message,
+                            "location": location
+                        })
+                    );
                 }
             }
         }
@@ -392,11 +403,19 @@ pub async fn run(
         if total_errors == 0 && total_warnings == 0 {
             println!("{}", "✓ All validations passed!".green().bold());
         } else if total_errors == 0 {
-            println!("{}", format!("✓ Validation passed with {total_warnings} warning(s)").yellow().bold());
+            println!(
+                "{}",
+                format!("✓ Validation passed with {total_warnings} warning(s)")
+                    .yellow()
+                    .bold()
+            );
         } else if total_warnings == 0 {
             println!("{}", format!("✗ Found {total_errors} error(s)").red());
         } else {
-            println!("{}", format!("✗ Found {total_errors} error(s) and {total_warnings} warning(s)").red());
+            println!(
+                "{}",
+                format!("✗ Found {total_errors} error(s) and {total_warnings} warning(s)").red()
+            );
         }
     }
 

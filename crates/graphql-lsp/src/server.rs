@@ -206,11 +206,8 @@ impl GraphQLLanguageServer {
         // Check for deprecated field usage
         let validator = graphql_project::Validator::new();
         let schema_index = project.get_schema_index();
-        let deprecation_warnings = validator.check_deprecated_fields_custom(
-            content,
-            &schema_index,
-            "document.graphql",
-        );
+        let deprecation_warnings =
+            validator.check_deprecated_fields_custom(content, &schema_index, "document.graphql");
 
         // Convert deprecation warnings to LSP diagnostics
         for warning in deprecation_warnings {
