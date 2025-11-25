@@ -222,11 +222,8 @@ impl GraphQLLanguageServer {
         use apollo_compiler::{ExecutableDocument, parser::Parser};
         use apollo_compiler::validation::Valid;
 
-        // Skip validation if this is a fragment-only document
-        // Fragments are validated in the context of operations
-        if self.is_fragment_only(content) {
-            return vec![];
-        }
+        // Fragment-only documents should still be validated for schema correctness
+        // (e.g., invalid fields, wrong types), just not for "unused fragment" warnings
 
         // Get the schema
         let schema_index = project.get_schema_index();
@@ -265,17 +262,34 @@ impl GraphQLLanguageServer {
         }
 
         // Build and validate
+        let is_fragment_only = self.is_fragment_only(content);
         let mut diagnostics = match builder.build() {
             Ok(doc) => {
                 // Successfully built, now validate
                 match doc.validate(valid_schema) {
                     Ok(_) => vec![],
-                    Err(with_errors) => self.convert_diagnostics(&with_errors.errors),
+                    Err(with_errors) => {
+                        let mut diags = self.convert_diagnostics(&with_errors.errors);
+                        // Filter out "unused fragment" warnings for fragment-only documents
+                        if is_fragment_only {
+                            diags.retain(|d| {
+                                !d.message.contains("unused") && !d.message.contains("never used")
+                            });
+                        }
+                        diags
+                    }
                 }
             }
             Err(with_errors) => {
                 // Build errors (e.g., undefined fragments, type errors)
-                self.convert_diagnostics(&with_errors.errors)
+                let mut diags = self.convert_diagnostics(&with_errors.errors);
+                // Filter out "unused fragment" warnings for fragment-only documents
+                if is_fragment_only {
+                    diags.retain(|d| {
+                        !d.message.contains("unused") && !d.message.contains("never used")
+                    });
+                }
+                diags
             }
         };
 
@@ -385,10 +399,8 @@ impl GraphQLLanguageServer {
             let line_offset = item.location.range.start.line;
             let source = &item.source;
 
-            // Skip documents that only contain fragments
-            if self.is_fragment_only(source) {
-                continue;
-            }
+            // Fragment-only documents should still be validated for schema correctness
+            // (e.g., invalid fields, wrong types), just not for "unused fragment" warnings
 
             // Build an executable document with all project fragments
             let mut builder = ExecutableDocument::builder(Some(valid_schema));
@@ -428,19 +440,34 @@ impl GraphQLLanguageServer {
             }
 
             // Build and validate
+            let is_fragment_only = self.is_fragment_only(source);
             match builder.build() {
                 Ok(doc) => {
                     // Successfully built, now validate
                     match doc.validate(valid_schema) {
                         Ok(_) => {}
                         Err(with_errors) => {
-                            all_diagnostics.extend(self.convert_diagnostics(&with_errors.errors));
+                            let mut diags = self.convert_diagnostics(&with_errors.errors);
+                            // Filter out "unused fragment" warnings for fragment-only documents
+                            if is_fragment_only {
+                                diags.retain(|d| {
+                                    !d.message.contains("unused") && !d.message.contains("never used")
+                                });
+                            }
+                            all_diagnostics.extend(diags);
                         }
                     }
                 }
                 Err(with_errors) => {
                     // Build errors (e.g., undefined fragments, type errors)
-                    all_diagnostics.extend(self.convert_diagnostics(&with_errors.errors));
+                    let mut diags = self.convert_diagnostics(&with_errors.errors);
+                    // Filter out "unused fragment" warnings for fragment-only documents
+                    if is_fragment_only {
+                        diags.retain(|d| {
+                            !d.message.contains("unused") && !d.message.contains("never used")
+                        });
+                    }
+                    all_diagnostics.extend(diags);
                 }
             }
 
