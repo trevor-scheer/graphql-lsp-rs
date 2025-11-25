@@ -480,12 +480,22 @@ impl GraphQLLanguageServer {
                         Ok(_) => {}
                         Err(with_errors) => {
                             let mut diags = self.convert_diagnostics(&with_errors.errors);
+
                             // Filter out "unused fragment" warnings for fragment-only documents
                             if is_fragment_only {
                                 diags.retain(|d| {
                                     !d.message.contains("unused") && !d.message.contains("never used")
                                 });
+                            } else {
+                                // For operations: filter out errors from fragments (they're validated separately)
+                                // Keep only errors within the current operation's line range
+                                let source_line_count = source.lines().count();
+                                diags.retain(|d| {
+                                    let start_line = d.range.start.line as usize;
+                                    start_line >= line_offset && start_line < line_offset + source_line_count
+                                });
                             }
+
                             all_diagnostics.extend(diags);
                         }
                     }
@@ -493,12 +503,22 @@ impl GraphQLLanguageServer {
                 Err(with_errors) => {
                     // Build errors (e.g., undefined fragments, type errors)
                     let mut diags = self.convert_diagnostics(&with_errors.errors);
+
                     // Filter out "unused fragment" warnings for fragment-only documents
                     if is_fragment_only {
                         diags.retain(|d| {
                             !d.message.contains("unused") && !d.message.contains("never used")
                         });
+                    } else {
+                        // For operations: filter out errors from fragments (they're validated separately)
+                        // Keep only errors within the current operation's line range
+                        let source_line_count = source.lines().count();
+                        diags.retain(|d| {
+                            let start_line = d.range.start.line as usize;
+                            start_line >= line_offset && start_line < line_offset + source_line_count
+                        });
                     }
+
                     all_diagnostics.extend(diags);
                 }
             }
