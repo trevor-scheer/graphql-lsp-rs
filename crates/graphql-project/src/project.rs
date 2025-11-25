@@ -260,12 +260,6 @@ impl GraphQLProject {
 
         let mut all_diagnostics = Vec::new();
 
-        // Collect all fragments from this file for use by operations
-        let fragments_in_current_file: Vec<_> = extracted
-            .iter()
-            .filter(|item| Self::is_fragment_only(&item.source))
-            .collect();
-
         // Validate each extracted document
         for item in extracted {
             let line_offset = item.location.range.start.line;
@@ -288,24 +282,15 @@ impl GraphQLProject {
                 &mut builder,
             );
 
-            // Only add fragments if this document contains operations
-            if !is_fragment_only {
-                // First, add fragments from the current file (without padding)
-                for frag_item in &fragments_in_current_file {
-                    Parser::new().parse_into_executable_builder(
-                        Some(valid_schema),
-                        &frag_item.source,
-                        file_path,
-                        &mut builder,
-                    );
-                }
-
-                // Then add fragments from other files in the project
+            // Only add fragments if this document contains operations AND uses fragment spreads
+            if !is_fragment_only && source.contains("...") {
+                // Add fragments from OTHER files (not current file)
+                // Fragments in the current file will be validated separately
                 let document_index = self.document_index.read().unwrap();
                 let current_path = std::path::Path::new(file_path);
 
                 for frag_info in document_index.fragments.values() {
-                    // Skip fragments from the current file - they're already added above
+                    // Skip fragments from the current file
                     if std::path::Path::new(&frag_info.file_path) == current_path {
                         continue;
                     }
@@ -338,9 +323,10 @@ impl GraphQLProject {
                         // For operations: filter to only errors within this document's line range
                         if !is_fragment_only {
                             let source_line_count = source.lines().count();
+                            let end_line = line_offset + source_line_count;
                             diags.retain(|d| {
                                 let start_line = d.range.start.line;
-                                start_line >= line_offset && start_line < line_offset + source_line_count
+                                start_line >= line_offset && start_line < end_line
                             });
                         }
 
@@ -353,9 +339,10 @@ impl GraphQLProject {
                     // For operations: filter to only errors within this document's line range
                     if !is_fragment_only {
                         let source_line_count = source.lines().count();
+                        let end_line = line_offset + source_line_count;
                         diags.retain(|d| {
                             let start_line = d.range.start.line;
-                            start_line >= line_offset && start_line < line_offset + source_line_count
+                            start_line >= line_offset && start_line < end_line
                         });
                     }
 
