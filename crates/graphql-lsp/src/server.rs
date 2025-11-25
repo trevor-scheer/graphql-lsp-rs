@@ -230,8 +230,9 @@ impl GraphQLLanguageServer {
         let schema = schema_index.schema();
         let valid_schema = Valid::assume_valid_ref(schema);
 
-        // Build an executable document with all project fragments
+        // Build an executable document
         let mut builder = ExecutableDocument::builder(Some(valid_schema));
+        let is_fragment_only = self.is_fragment_only(content);
 
         // Add the current document
         Parser::new().parse_into_executable_builder(
@@ -241,28 +242,30 @@ impl GraphQLLanguageServer {
             &mut builder,
         );
 
-        // Add all fragments from the project
-        let document_index = project.get_document_index();
-        for frag_info in document_index.fragments.values() {
-            if let Ok(frag_extracted) = graphql_extract::extract_from_file(
-                std::path::Path::new(&frag_info.file_path),
-                &ExtractConfig::default(),
-            ) {
-                for frag_item in frag_extracted {
-                    if frag_item.source.trim_start().starts_with("fragment") {
-                        Parser::new().parse_into_executable_builder(
-                            Some(valid_schema),
-                            &frag_item.source,
-                            &frag_info.file_path,
-                            &mut builder,
-                        );
+        // Only add project fragments if this document contains operations
+        // Standalone fragments should be validated on their own, not with other fragments
+        if !is_fragment_only {
+            let document_index = project.get_document_index();
+            for frag_info in document_index.fragments.values() {
+                if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+                    std::path::Path::new(&frag_info.file_path),
+                    &ExtractConfig::default(),
+                ) {
+                    for frag_item in frag_extracted {
+                        if frag_item.source.trim_start().starts_with("fragment") {
+                            Parser::new().parse_into_executable_builder(
+                                Some(valid_schema),
+                                &frag_item.source,
+                                &frag_info.file_path,
+                                &mut builder,
+                            );
+                        }
                     }
                 }
             }
         }
 
         // Build and validate
-        let is_fragment_only = self.is_fragment_only(content);
         let mut diagnostics = match builder.build() {
             Ok(doc) => {
                 // Successfully built, now validate
@@ -402,8 +405,9 @@ impl GraphQLLanguageServer {
             // Fragment-only documents should still be validated for schema correctness
             // (e.g., invalid fields, wrong types), just not for "unused fragment" warnings
 
-            // Build an executable document with all project fragments
+            // Build an executable document
             let mut builder = ExecutableDocument::builder(Some(valid_schema));
+            let is_fragment_only = self.is_fragment_only(source);
 
             // Add the current document with line offset padding for correct diagnostics
             let padded_source = if line_offset > 0 {
@@ -419,28 +423,30 @@ impl GraphQLLanguageServer {
                 &mut builder,
             );
 
-            // Add all fragments from the project
-            let document_index = project.get_document_index();
-            for frag_info in document_index.fragments.values() {
-                if let Ok(frag_extracted) = graphql_extract::extract_from_file(
-                    std::path::Path::new(&frag_info.file_path),
-                    &ExtractConfig::default(),
-                ) {
-                    for frag_item in frag_extracted {
-                        if frag_item.source.trim_start().starts_with("fragment") {
-                            Parser::new().parse_into_executable_builder(
-                                Some(valid_schema),
-                                &frag_item.source,
-                                &frag_info.file_path,
-                                &mut builder,
-                            );
+            // Only add project fragments if this document contains operations
+            // Standalone fragments should be validated on their own, not with other fragments
+            if !is_fragment_only {
+                let document_index = project.get_document_index();
+                for frag_info in document_index.fragments.values() {
+                    if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+                        std::path::Path::new(&frag_info.file_path),
+                        &ExtractConfig::default(),
+                    ) {
+                        for frag_item in frag_extracted {
+                            if frag_item.source.trim_start().starts_with("fragment") {
+                                Parser::new().parse_into_executable_builder(
+                                    Some(valid_schema),
+                                    &frag_item.source,
+                                    &frag_info.file_path,
+                                    &mut builder,
+                                );
+                            }
                         }
                     }
                 }
             }
 
             // Build and validate
-            let is_fragment_only = self.is_fragment_only(source);
             match builder.build() {
                 Ok(doc) => {
                     // Successfully built, now validate
