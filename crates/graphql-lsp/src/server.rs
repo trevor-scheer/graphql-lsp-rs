@@ -393,10 +393,16 @@ impl GraphQLLanguageServer {
             // Build an executable document with all project fragments
             let mut builder = ExecutableDocument::builder(Some(valid_schema));
 
-            // Add the current document
+            // Add the current document with line offset padding for correct diagnostics
+            let padded_source = if line_offset > 0 {
+                format!("{}{}", "\n".repeat(line_offset), source)
+            } else {
+                source.to_string()
+            };
+
             Parser::new().parse_into_executable_builder(
                 Some(valid_schema),
-                source,
+                &padded_source,
                 &uri.to_string(),
                 &mut builder,
             );
