@@ -1,5 +1,6 @@
 use crate::SchemaIndex;
 use apollo_compiler::{
+    parser::{Parser, SourceOffset},
     validation::{DiagnosticList, Valid},
     ExecutableDocument,
 };
@@ -73,7 +74,7 @@ impl Validator {
 
     /// Validate a document with adjusted source to match file line numbers
     ///
-    /// Prepends newlines to the document so diagnostics show correct line numbers.
+    /// Uses apollo-compiler's source offset feature to report errors at the correct line numbers.
     /// The `line_offset` is 0-indexed (0 means document starts on line 1).
     pub fn validate_document_with_location(
         &self,
@@ -82,14 +83,26 @@ impl Validator {
         file_name: &str,
         line_offset: usize,
     ) -> Result<(), DiagnosticList> {
-        // Prepend newlines to adjust line numbers in diagnostics
-        let adjusted_source = if line_offset > 0 {
-            format!("{}{}", "\n".repeat(line_offset), document)
-        } else {
-            document.to_string()
+        // Check if this is a fragment-only document
+        if Self::is_fragment_only_document(document) {
+            return Ok(());
+        }
+
+        // Get the underlying apollo-compiler Schema
+        let schema = schema_index.schema();
+        let valid_schema = Valid::assume_valid_ref(schema);
+
+        // Parse and validate with source offset - convert 0-indexed to 1-indexed
+        let offset = SourceOffset {
+            line: line_offset + 1,
+            column: 1,
         };
 
-        self.validate_document_with_name(&adjusted_source, schema_index, file_name)
+        let mut parser = Parser::new().source_offset(offset);
+        parser
+            .parse_executable(valid_schema, document, file_name)
+            .map(|_| ())
+            .map_err(|with_errors| with_errors.errors)
     }
 
     /// Validate a document that's already been parsed

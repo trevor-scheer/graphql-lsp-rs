@@ -1,4 +1,4 @@
-import { gql } from '@apollo/client';
+import { gql } from "@apollo/client";
 
 // This should be valid
 const VALID_QUERY = gql`
@@ -27,6 +27,15 @@ const INVALID_QUERY = gql`
         title
         anotherInvalidField
       }
+      ...UserFragment
     }
+  }
+`;
+
+const FRAGMENT = gql`
+  fragment UserFragment on User {
+    id
+    name
+    b
   }
 `;

@@ -1,4 +1,3 @@
-use apollo_compiler::validation::DiagnosticList;
 use dashmap::DashMap;
 use graphql_config::{find_config, load_config};
 use graphql_extract::ExtractConfig;
@@ -54,7 +53,7 @@ impl GraphQLLanguageServer {
                             Ok(projects) => {
                                 tracing::info!("Loaded {} GraphQL project(s)", projects.len());
 
-                                // Load schemas for all projects
+                                // Load schemas and documents for all projects
                                 for (name, project) in &projects {
                                     if let Err(e) = project.load_schema().await {
                                         tracing::error!(
@@ -68,6 +67,27 @@ impl GraphQLLanguageServer {
                                             .await;
                                     } else {
                                         tracing::info!("Loaded schema for project '{}'", name);
+                                    }
+
+                                    // Load documents to index all fragments
+                                    if let Err(e) = project.load_documents() {
+                                        tracing::error!(
+                                            "Failed to load documents for project '{name}': {e}"
+                                        );
+                                        self.client
+                                            .log_message(
+                                                MessageType::WARNING,
+                                                format!("Failed to load documents for project '{name}': {e}"),
+                                            )
+                                            .await;
+                                    } else {
+                                        let doc_index = project.get_document_index();
+                                        tracing::info!(
+                                            "Loaded documents for project '{}': {} operations, {} fragments",
+                                            name,
+                                            doc_index.operations.len(),
+                                            doc_index.fragments.len()
+                                        );
                                     }
                                 }
 
@@ -198,39 +218,14 @@ impl GraphQLLanguageServer {
         content: &str,
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
-        let mut diagnostics = match project.validate_document(content) {
-            Ok(()) => vec![],
-            Err(diagnostic_list) => self.convert_diagnostics(&diagnostic_list),
-        };
+        // Use the centralized validation logic from graphql-project
+        let project_diagnostics = project.validate_document_source(content, "document.graphql");
 
-        // Check for deprecated field usage
-        let validator = graphql_project::Validator::new();
-        let schema_index = project.get_schema_index();
-        let deprecation_warnings =
-            validator.check_deprecated_fields_custom(content, &schema_index, "document.graphql");
-
-        // Convert deprecation warnings to LSP diagnostics
-        for warning in deprecation_warnings {
-            diagnostics.push(Diagnostic {
-                range: Range {
-                    start: Position {
-                        line: warning.range.start.line as u32,
-                        character: warning.range.start.character as u32,
-                    },
-                    end: Position {
-                        line: warning.range.end.line as u32,
-                        character: warning.range.end.character as u32,
-                    },
-                },
-                severity: Some(DiagnosticSeverity::WARNING),
-                code: warning.code.map(lsp_types::NumberOrString::String),
-                source: Some(warning.source),
-                message: warning.message,
-                ..Default::default()
-            });
-        }
-
-        diagnostics
+        // Convert graphql-project diagnostics to LSP diagnostics
+        project_diagnostics
+            .into_iter()
+            .map(|d| self.convert_project_diagnostic(d))
+            .collect()
     }
 
     /// Validate GraphQL embedded in TypeScript/JavaScript
@@ -242,8 +237,6 @@ impl GraphQLLanguageServer {
         content: &str,
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
-        // Write content to a temp file for extraction
-        // graphql-extract needs a file path to parse, and it checks the file extension
         use std::io::Write;
 
         // Get the file extension from the original URI to preserve it in the temp file
@@ -289,103 +282,48 @@ impl GraphQLLanguageServer {
             uri
         );
 
-        let mut all_diagnostics = Vec::new();
+        // Use the centralized validation logic from graphql-project
+        let file_path = uri.to_string();
+        let project_diagnostics = project.validate_extracted_documents(&extracted, &file_path);
 
-        // Validate each extracted document
-        for item in extracted {
-            let line_offset = item.location.range.start.line;
-
-            match project.validate_document_with_location(
-                &item.source,
-                &uri.to_string(),
-                line_offset,
-            ) {
-                Ok(()) => {}
-                Err(diagnostic_list) => {
-                    all_diagnostics.extend(self.convert_diagnostics(&diagnostic_list));
-                }
-            }
-
-            // Check for deprecated field usage
-            let validator = graphql_project::Validator::new();
-            let schema_index = project.get_schema_index();
-            let deprecation_warnings = validator.check_deprecated_fields_custom(
-                &item.source,
-                &schema_index,
-                &uri.to_string(),
-            );
-
-            // Convert deprecation warnings to LSP diagnostics
-            for warning in deprecation_warnings {
-                all_diagnostics.push(Diagnostic {
-                    range: Range {
-                        start: Position {
-                            line: (line_offset + warning.range.start.line) as u32,
-                            character: warning.range.start.character as u32,
-                        },
-                        end: Position {
-                            line: (line_offset + warning.range.end.line) as u32,
-                            character: warning.range.end.character as u32,
-                        },
-                    },
-                    severity: Some(DiagnosticSeverity::WARNING),
-                    code: warning.code.map(lsp_types::NumberOrString::String),
-                    source: Some(warning.source),
-                    message: warning.message,
-                    ..Default::default()
-                });
-            }
-        }
-
-        all_diagnostics
+        // Convert graphql-project diagnostics to LSP diagnostics
+        project_diagnostics
+            .into_iter()
+            .map(|d| self.convert_project_diagnostic(d))
+            .collect()
     }
 
-    /// Convert apollo-compiler diagnostics to LSP diagnostics
+    /// Convert graphql-project diagnostic to LSP diagnostic
     #[must_use]
     #[allow(clippy::cast_possible_truncation)]
     #[allow(clippy::unused_self)]
-    fn convert_diagnostics(&self, diagnostic_list: &DiagnosticList) -> Vec<Diagnostic> {
-        diagnostic_list
-            .iter()
-            .map(|diag| {
-                let range = diag.line_column_range().map_or(
-                    Range {
-                        start: Position {
-                            line: 0,
-                            character: 0,
-                        },
-                        end: Position {
-                            line: 0,
-                            character: 1,
-                        },
-                    },
-                    |loc_range| {
-                        // apollo-compiler uses 1-based, LSP uses 0-based
-                        // We allow cast_possible_truncation because line/column numbers
-                        // in source files are unlikely to exceed u32::MAX
-                        Range {
-                            start: Position {
-                                line: loc_range.start.line.saturating_sub(1) as u32,
-                                character: loc_range.start.column.saturating_sub(1) as u32,
-                            },
-                            end: Position {
-                                line: loc_range.end.line.saturating_sub(1) as u32,
-                                character: loc_range.end.column.saturating_sub(1) as u32,
-                            },
-                        }
-                    },
-                );
+    fn convert_project_diagnostic(&self, diag: graphql_project::Diagnostic) -> Diagnostic {
+        use graphql_project::Severity;
 
-                Diagnostic {
-                    range,
-                    severity: Some(DiagnosticSeverity::ERROR),
-                    code: None,
-                    source: Some("graphql".to_string()),
-                    message: diag.error.to_string(),
-                    ..Default::default()
-                }
-            })
-            .collect()
+        let severity = match diag.severity {
+            Severity::Error => DiagnosticSeverity::ERROR,
+            Severity::Warning => DiagnosticSeverity::WARNING,
+            Severity::Information => DiagnosticSeverity::INFORMATION,
+            Severity::Hint => DiagnosticSeverity::HINT,
+        };
+
+        Diagnostic {
+            range: Range {
+                start: Position {
+                    line: diag.range.start.line as u32,
+                    character: diag.range.start.character as u32,
+                },
+                end: Position {
+                    line: diag.range.end.line as u32,
+                    character: diag.range.end.character as u32,
+                },
+            },
+            severity: Some(severity),
+            code: diag.code.map(lsp_types::NumberOrString::String),
+            source: Some(diag.source),
+            message: diag.message,
+            ..Default::default()
+        }
     }
 }
 

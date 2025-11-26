@@ -1,0 +1,8 @@
+fragment UserWithPosts on User {
+  id
+  name
+  posts {
+    id
+    title
+  }
+}

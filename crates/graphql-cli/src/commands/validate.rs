@@ -126,41 +126,20 @@ pub async fn run(
         // Validate all loaded documents
         let document_index = project.get_document_index();
 
-        // Collect all fragment definitions from the project
-        // These will be included when validating operations
-        let mut all_fragments = Vec::new();
-        let mut fragment_file_paths = std::collections::HashSet::new();
-
-        for frag_info in document_index.fragments.values() {
-            fragment_file_paths.insert(&frag_info.file_path);
-        }
-
-        // Extract all fragment sources
-        for frag_path in fragment_file_paths {
-            if let Ok(extracted) = graphql_extract::extract_from_file(
-                std::path::Path::new(frag_path),
-                &graphql_extract::ExtractConfig::default(),
-            ) {
-                for item in extracted {
-                    if item.source.trim_start().starts_with("fragment") {
-                        all_fragments.push(item.source);
-                    }
-                }
-            }
-        }
-
-        // Collect all warnings and errors first, then display them
-        // Collect unique file paths that contain operations
-        let mut operation_file_paths = std::collections::HashSet::new();
+        // Collect unique file paths that contain operations or fragments
+        let mut all_file_paths = std::collections::HashSet::new();
         for op_info in document_index.operations.values() {
-            operation_file_paths.insert(&op_info.file_path);
+            all_file_paths.insert(&op_info.file_path);
+        }
+        for frag_info in document_index.fragments.values() {
+            all_file_paths.insert(&frag_info.file_path);
         }
 
         let mut all_warnings = Vec::new();
         let mut all_errors = Vec::new();
 
-        // Validate each file containing operations
-        for file_path in operation_file_paths {
+        // Validate each file using the centralized validation logic
+        for file_path in all_file_paths {
             // Use graphql-extract to extract GraphQL from the file
             // This handles both .graphql files and embedded GraphQL in TypeScript/JavaScript
             let extracted = match graphql_extract::extract_from_file(
@@ -186,123 +165,29 @@ pub async fn run(
                 continue;
             }
 
-            // Validate each extracted GraphQL document
-            for item in &extracted {
-                let source = &item.source;
+            // Use the centralized validation logic from graphql-project
+            let diagnostics = project.validate_extracted_documents(&extracted, file_path);
 
-                // Skip documents that only contain fragments
-                // Fragments are validated in the context of operations
-                if source.trim_start().starts_with("fragment")
-                    && !source.contains("query")
-                    && !source.contains("mutation")
-                    && !source.contains("subscription")
-                {
-                    continue;
-                }
+            // Convert graphql-project diagnostics to CLI output format
+            for diag in diagnostics {
+                use graphql_project::Severity;
 
-                // Find all fragment spreads recursively (fragments can reference other fragments)
-                let mut referenced_fragments = std::collections::HashSet::new();
-                let mut to_process = vec![source.clone()];
-
-                while let Some(doc) = to_process.pop() {
-                    for line in doc.lines() {
-                        let trimmed = line.trim();
-                        if let Some(stripped) = trimmed.strip_prefix("...") {
-                            // Extract fragment name (everything after ... until whitespace or special char)
-                            let frag_name = stripped
-                                .split(|c: char| c.is_whitespace() || c == '@')
-                                .next()
-                                .unwrap_or("");
-                            if !frag_name.is_empty() && !referenced_fragments.contains(frag_name) {
-                                referenced_fragments.insert(frag_name.to_string());
-
-                                // Find and queue the fragment definition for processing
-                                if let Some(frag_def) = all_fragments
-                                    .iter()
-                                    .find(|f| f.contains(&format!("fragment {frag_name}")))
-                                {
-                                    to_process.push(frag_def.clone());
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Collect all referenced fragments
-                let relevant_fragments: Vec<&String> = all_fragments
-                    .iter()
-                    .filter(|frag| {
-                        referenced_fragments
-                            .iter()
-                            .any(|name| frag.contains(&format!("fragment {name}")))
-                    })
-                    .collect();
-
-                // Combine the operation with all referenced fragments (including transitive dependencies)
-                let combined_source = if relevant_fragments.is_empty() {
-                    source.clone()
-                } else {
-                    let fragments_str = relevant_fragments
-                        .iter()
-                        .map(|s| s.as_str())
-                        .collect::<Vec<_>>()
-                        .join("\n\n");
-                    format!("{source}\n\n{fragments_str}")
+                let diag_output = DiagnosticOutput {
+                    file_path: file_path.clone(),
+                    // graphql-project uses 0-based, CLI output uses 1-based
+                    line: diag.range.start.line + 1,
+                    column: diag.range.start.character + 1,
+                    end_line: diag.range.end.line + 1,
+                    end_column: diag.range.end.character + 1,
+                    message: diag.message,
                 };
 
-                // Validate with the actual file path and line offset
-                // This makes apollo-compiler's diagnostics show the correct file:line:column
-                let line_offset = item.location.range.start.line;
-
-                // Check for deprecation warnings (regardless of validation result)
-                let validator = graphql_project::Validator::new();
-                let schema_index = project.get_schema_index();
-                let deprecation_warnings = validator.check_deprecated_fields_custom(
-                    &combined_source,
-                    &schema_index,
-                    file_path,
-                );
-
-                for warning in deprecation_warnings {
-                    all_warnings.push(DiagnosticOutput {
-                        file_path: file_path.clone(),
-                        line: line_offset + warning.range.start.line + 1,
-                        column: warning.range.start.character + 1,
-                        end_line: line_offset + warning.range.end.line + 1,
-                        end_column: warning.range.end.character + 1,
-                        message: warning.message,
-                    });
-                }
-
-                let validation_result = project.validate_document_with_location(
-                    &combined_source,
-                    file_path,
-                    line_offset,
-                );
-
-                if let Err(diagnostics) = validation_result {
-                    // Found validation errors - collect them
-                    for diagnostic in diagnostics.iter() {
-                        if let Some(range) = diagnostic.line_column_range() {
-                            all_errors.push(DiagnosticOutput {
-                                file_path: file_path.clone(),
-                                line: range.start.line,
-                                column: range.start.column,
-                                end_line: range.end.line,
-                                end_column: range.end.column,
-                                message: format!("{}", diagnostic.error),
-                            });
-                        } else {
-                            // If no location available, still include the error
-                            all_errors.push(DiagnosticOutput {
-                                file_path: file_path.clone(),
-                                line: 0,
-                                column: 0,
-                                end_line: 0,
-                                end_column: 0,
-                                message: format!("{diagnostic}"),
-                            });
-                        }
+                match diag.severity {
+                    Severity::Warning | Severity::Information | Severity::Hint => {
+                        all_warnings.push(diag_output);
+                    }
+                    Severity::Error => {
+                        all_errors.push(diag_output);
                     }
                 }
             }

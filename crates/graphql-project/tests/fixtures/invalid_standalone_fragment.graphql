@@ -1,0 +1,9 @@
+fragment InvalidPostFields on Post {
+  id
+  title
+  nonExistentField
+  author {
+    id
+    name
+  }
+}

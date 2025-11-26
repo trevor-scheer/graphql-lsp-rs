@@ -1,0 +1,5 @@
+query GetUsersWithPosts {
+  users {
+    ...UserWithPosts
+  }
+}
