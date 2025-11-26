@@ -113,15 +113,24 @@ impl DocumentLoader {
 
         // Parse each extracted GraphQL document
         for item in extracted {
-            Self::parse_and_index(&item.source, &file_path, index);
+            Self::parse_and_index(&item, &file_path, index);
         }
 
         Ok(())
     }
 
     /// Parse GraphQL source and add operations/fragments to index
-    fn parse_and_index(source: &str, file_path: &str, index: &mut DocumentIndex) {
+    fn parse_and_index(
+        item: &graphql_extract::ExtractedGraphQL,
+        file_path: &str,
+        index: &mut DocumentIndex,
+    ) {
         use apollo_parser::cst::CstNode;
+
+        let source = &item.source;
+        // Get the starting position in the original file for this extracted block
+        let base_line = item.location.range.start.line;
+        let base_column = item.location.range.start.column;
 
         let parser = Parser::new(source);
         let tree = parser.parse();
@@ -151,8 +160,17 @@ impl DocumentLoader {
                         let name_str = name_node.text().to_string();
                         let syntax_node = name_node.syntax();
                         let offset: usize = syntax_node.text_range().start().into();
-                        let (line, col) = Self::offset_to_line_col(source, offset);
-                        (Some(name_str), line, col)
+                        let (rel_line, rel_col) = Self::offset_to_line_col(source, offset);
+
+                        // Add the base position from the extracted block
+                        let abs_line = base_line + rel_line;
+                        let abs_col = if rel_line == 0 {
+                            base_column + rel_col
+                        } else {
+                            rel_col
+                        };
+
+                        (Some(name_str), abs_line, abs_col)
                     });
 
                     let info = OperationInfo {
@@ -181,7 +199,17 @@ impl DocumentLoader {
                         let (line, column) = name_node.name().map_or((0, 0), |name_token| {
                             let syntax_node = name_token.syntax();
                             let offset: usize = syntax_node.text_range().start().into();
-                            Self::offset_to_line_col(source, offset)
+                            let (rel_line, rel_col) = Self::offset_to_line_col(source, offset);
+
+                            // Add the base position from the extracted block
+                            let abs_line = base_line + rel_line;
+                            let abs_col = if rel_line == 0 {
+                                base_column + rel_col
+                            } else {
+                                rel_col
+                            };
+
+                            (abs_line, abs_col)
                         });
 
                         let info = FragmentInfo {
