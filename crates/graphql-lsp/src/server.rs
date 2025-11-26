@@ -547,12 +547,79 @@ impl LanguageServer for GraphQLLanguageServer {
         &self,
         params: GotoDefinitionParams,
     ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params.text_document_position_params.text_document.uri;
+        let lsp_position = params.text_document_position_params.position;
+
         tracing::debug!(
-            "Go to definition requested: {:?}",
-            params.text_document_position_params.text_document.uri
+            "Go to definition requested: {:?} at {:?}",
+            uri,
+            lsp_position
         );
-        // TODO: Implement go-to-definition
-        Ok(None)
+
+        // Get the cached document content
+        let Some(content) = self.document_cache.get(&uri.to_string()) else {
+            tracing::warn!("No cached content for document: {:?}", uri);
+            return Ok(None);
+        };
+
+        // Find the workspace and project for this document
+        let Some((workspace_uri, project_idx)) = self.find_workspace_and_project(&uri) else {
+            tracing::warn!("No project found for document: {:?}", uri);
+            return Ok(None);
+        };
+
+        // Get the project
+        let Some(projects) = self.projects.get(&workspace_uri) else {
+            tracing::warn!("No projects loaded for workspace: {workspace_uri}");
+            return Ok(None);
+        };
+
+        let Some((_, project)) = projects.get(project_idx) else {
+            tracing::warn!("Project index {project_idx} not found in workspace {workspace_uri}");
+            return Ok(None);
+        };
+
+        // Convert LSP position to graphql-project Position (0-indexed)
+        let position = graphql_project::Position {
+            line: lsp_position.line as usize,
+            character: lsp_position.character as usize,
+        };
+
+        // Get definition locations from the project
+        let Some(locations) = project.goto_definition(&content, position) else {
+            tracing::debug!("No definition found at position {:?}", position);
+            return Ok(None);
+        };
+
+        tracing::debug!("Found {} definition location(s)", locations.len());
+
+        // Convert to LSP Locations
+        #[allow(clippy::cast_possible_truncation)]
+        let lsp_locations: Vec<Location> = locations
+            .iter()
+            .filter_map(|loc| {
+                let file_uri = Uri::from_file_path(&loc.file_path)?;
+                Some(Location {
+                    uri: file_uri,
+                    range: Range {
+                        start: Position {
+                            line: loc.range.start.line as u32,
+                            character: loc.range.start.character as u32,
+                        },
+                        end: Position {
+                            line: loc.range.end.line as u32,
+                            character: loc.range.end.character as u32,
+                        },
+                    },
+                })
+            })
+            .collect();
+
+        if lsp_locations.is_empty() {
+            Ok(None)
+        } else {
+            Ok(Some(GotoDefinitionResponse::Array(lsp_locations)))
+        }
     }
 
     async fn references(&self, params: ReferenceParams) -> Result<Option<Vec<Location>>> {

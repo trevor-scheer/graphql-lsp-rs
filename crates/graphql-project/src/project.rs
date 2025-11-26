@@ -1,6 +1,6 @@
 use crate::{
-    Diagnostic, DocumentIndex, DocumentLoader, HoverInfo, HoverProvider, Position, Result,
-    SchemaIndex, SchemaLoader, Validator,
+    DefinitionLocation, Diagnostic, DocumentIndex, DocumentLoader, GotoDefinitionProvider,
+    HoverInfo, HoverProvider, Position, Result, SchemaIndex, SchemaLoader, Validator,
 };
 use apollo_compiler::validation::DiagnosticList;
 use graphql_config::{GraphQLConfig, ProjectConfig};
@@ -451,6 +451,23 @@ impl GraphQLProject {
         let schema_index = self.schema_index.read().unwrap();
         let hover_provider = HoverProvider::new();
         hover_provider.hover(source, position, &schema_index)
+    }
+
+    /// Get definition locations for a position in a GraphQL document
+    ///
+    /// Returns the locations where the element at the given position is defined.
+    /// For example, clicking on a fragment spread will return the location of the
+    /// fragment definition.
+    #[must_use]
+    pub fn goto_definition(
+        &self,
+        source: &str,
+        position: Position,
+    ) -> Option<Vec<DefinitionLocation>> {
+        let document_index = self.document_index.read().unwrap();
+        let schema_index = self.schema_index.read().unwrap();
+        let provider = GotoDefinitionProvider::new();
+        provider.goto_definition(source, position, &document_index, &schema_index)
     }
 
     /// Check if a file path matches the schema configuration
