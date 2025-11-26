@@ -17,8 +17,7 @@ async fn create_test_project() -> (TempDir, GraphQLProject) {
         .join("fixtures")
         .join("schema.graphql");
     let schema_content = fs::read_to_string(schema_path).expect("Failed to read schema");
-    fs::write(base_path.join("schema.graphql"), schema_content)
-        .expect("Failed to write schema");
+    fs::write(base_path.join("schema.graphql"), schema_content).expect("Failed to write schema");
 
     // Copy fragment files
     let fragment_user_path = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -39,8 +38,11 @@ async fn create_test_project() -> (TempDir, GraphQLProject) {
     if fragment_with_posts_path.exists() {
         let fragment_content =
             fs::read_to_string(&fragment_with_posts_path).expect("Failed to read fragment");
-        fs::write(base_path.join("fragment_with_posts.graphql"), fragment_content)
-            .expect("Failed to write fragment");
+        fs::write(
+            base_path.join("fragment_with_posts.graphql"),
+            fragment_content,
+        )
+        .expect("Failed to write fragment");
     }
 
     // Create GraphQL config
@@ -58,10 +60,7 @@ async fn create_test_project() -> (TempDir, GraphQLProject) {
     // Create and load the project
     let project = GraphQLProject::new(config).with_base_dir(base_path.to_path_buf());
 
-    project
-        .load_schema()
-        .await
-        .expect("Failed to load schema");
+    project.load_schema().await.expect("Failed to load schema");
 
     // Load documents to index fragments
     let _ = project.load_documents();
@@ -169,7 +168,9 @@ fragment InvalidPostFields on Post {
 
     let error_messages: Vec<String> = diagnostics.iter().map(|d| d.message.clone()).collect();
     assert!(
-        error_messages.iter().any(|msg| msg.contains("nonExistentField") || msg.contains("field")),
+        error_messages
+            .iter()
+            .any(|msg| msg.contains("nonExistentField") || msg.contains("field")),
         "Should have error about invalid field, got: {:?}",
         error_messages
     );
@@ -221,7 +222,9 @@ query GetUsers {
 
     let error_messages: Vec<String> = diagnostics.iter().map(|d| d.message.clone()).collect();
     assert!(
-        error_messages.iter().any(|msg| msg.contains("UndefinedFragment") || msg.contains("fragment")),
+        error_messages
+            .iter()
+            .any(|msg| msg.contains("UndefinedFragment") || msg.contains("fragment")),
         "Should have error about undefined fragment, got: {:?}",
         error_messages
     );
@@ -255,11 +258,9 @@ const GET_USERS = gql`
     fs::write(&ts_path, ts_content).expect("Failed to write TypeScript file");
 
     // Extract GraphQL from TypeScript
-    let extracted = graphql_extract::extract_from_file(
-        &ts_path,
-        &graphql_extract::ExtractConfig::default(),
-    )
-    .expect("Failed to extract GraphQL");
+    let extracted =
+        graphql_extract::extract_from_file(&ts_path, &graphql_extract::ExtractConfig::default())
+            .expect("Failed to extract GraphQL");
 
     let diagnostics = project.validate_extracted_documents(&extracted, ts_path.to_str().unwrap());
 
@@ -295,11 +296,9 @@ const GET_USERS = gql`
     fs::write(&ts_path, ts_content).expect("Failed to write TypeScript file");
 
     // Extract GraphQL from TypeScript
-    let extracted = graphql_extract::extract_from_file(
-        &ts_path,
-        &graphql_extract::ExtractConfig::default(),
-    )
-    .expect("Failed to extract GraphQL");
+    let extracted =
+        graphql_extract::extract_from_file(&ts_path, &graphql_extract::ExtractConfig::default())
+            .expect("Failed to extract GraphQL");
 
     let diagnostics = project.validate_extracted_documents(&extracted, ts_path.to_str().unwrap());
 
@@ -311,7 +310,9 @@ const GET_USERS = gql`
 
     let error_messages: Vec<String> = diagnostics.iter().map(|d| d.message.clone()).collect();
     assert!(
-        error_messages.iter().any(|msg| msg.contains("invalidField") || msg.contains("field")),
+        error_messages
+            .iter()
+            .any(|msg| msg.contains("invalidField") || msg.contains("field")),
         "Should have error about invalid field, got: {:?}",
         error_messages
     );
@@ -343,24 +344,17 @@ const GET_USERS = gql`
     fs::write(&ts_path, ts_content).expect("Failed to write TypeScript file");
 
     // Extract GraphQL from TypeScript
-    let extracted = graphql_extract::extract_from_file(
-        &ts_path,
-        &graphql_extract::ExtractConfig::default(),
-    )
-    .expect("Failed to extract GraphQL");
+    let extracted =
+        graphql_extract::extract_from_file(&ts_path, &graphql_extract::ExtractConfig::default())
+            .expect("Failed to extract GraphQL");
 
     let diagnostics = project.validate_extracted_documents(&extracted, ts_path.to_str().unwrap());
 
     // Should have error with correct line number (accounting for offset)
-    assert!(
-        !diagnostics.is_empty(),
-        "Should have validation errors"
-    );
+    assert!(!diagnostics.is_empty(), "Should have validation errors");
 
     // The error should be on a line > 7 (because of the offset in the TypeScript file)
-    let has_offset_error = diagnostics.iter().any(|d| {
-        d.range.start.line > 7
-    });
+    let has_offset_error = diagnostics.iter().any(|d| d.range.start.line > 7);
 
     assert!(
         has_offset_error,

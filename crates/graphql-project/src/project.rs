@@ -181,7 +181,8 @@ impl GraphQLProject {
         let schema = schema_index.schema();
         let valid_schema = Valid::assume_valid_ref(schema);
 
-        let mut errors = apollo_compiler::validation::DiagnosticList::new(Default::default());
+        let mut errors =
+            apollo_compiler::validation::DiagnosticList::new(std::sync::Arc::default());
         let mut builder = ExecutableDocument::builder(Some(valid_schema), &mut errors);
         let is_fragment_only = Self::is_fragment_only(source);
 
@@ -268,7 +269,8 @@ impl GraphQLProject {
             let col_offset = item.location.range.start.column;
             let source = &item.source;
 
-            let mut errors = apollo_compiler::validation::DiagnosticList::new(Default::default());
+            let mut errors =
+                apollo_compiler::validation::DiagnosticList::new(std::sync::Arc::default());
             let mut builder = ExecutableDocument::builder(Some(valid_schema), &mut errors);
             let is_fragment_only = Self::is_fragment_only(source);
 
@@ -283,7 +285,7 @@ impl GraphQLProject {
 
             let offset = apollo_compiler::parser::SourceOffset {
                 line: adjusted_line + 1,  // Convert to 1-indexed
-                column: adjusted_col + 1,  // Convert to 1-indexed
+                column: adjusted_col + 1, // Convert to 1-indexed
             };
 
             Parser::new()
