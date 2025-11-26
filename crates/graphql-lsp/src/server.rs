@@ -24,6 +24,8 @@ pub struct GraphQLLanguageServer {
     workspace_roots: Arc<DashMap<String, PathBuf>>,
     /// GraphQL projects by workspace URI -> Vec<(`project_name`, project)>
     projects: Arc<DashMap<String, Vec<(String, GraphQLProject)>>>,
+    /// Document content cache indexed by URI string
+    document_cache: Arc<DashMap<String, String>>,
 }
 
 impl GraphQLLanguageServer {
@@ -33,6 +35,7 @@ impl GraphQLLanguageServer {
             init_workspace_folders: Arc::new(DashMap::new()),
             workspace_roots: Arc::new(DashMap::new()),
             projects: Arc::new(DashMap::new()),
+            document_cache: Arc::new(DashMap::new()),
         }
     }
 
@@ -431,6 +434,9 @@ impl LanguageServer for GraphQLLanguageServer {
         let content = params.text_document.text;
         tracing::info!("Document opened: {:?}", uri);
 
+        // Cache the document content
+        self.document_cache.insert(uri.to_string(), content.clone());
+
         self.validate_document(uri, &content).await;
     }
 
@@ -440,6 +446,10 @@ impl LanguageServer for GraphQLLanguageServer {
 
         // Get the latest content from changes (full sync mode)
         for change in params.content_changes {
+            // Update the document cache
+            self.document_cache
+                .insert(uri.to_string(), change.text.clone());
+
             self.validate_document(uri.clone(), &change.text).await;
         }
     }
@@ -451,6 +461,11 @@ impl LanguageServer for GraphQLLanguageServer {
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         tracing::info!("Document closed: {:?}", params.text_document.uri);
+
+        // Remove from document cache
+        self.document_cache
+            .remove(&params.text_document.uri.to_string());
+
         // Clear diagnostics
         self.client
             .publish_diagnostics(params.text_document.uri, vec![], None)
@@ -467,12 +482,65 @@ impl LanguageServer for GraphQLLanguageServer {
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
-        tracing::debug!(
-            "Hover requested: {:?}",
-            params.text_document_position_params.text_document.uri
-        );
-        // TODO: Implement hover information
-        Ok(None)
+        let uri = params.text_document_position_params.text_document.uri;
+        let lsp_position = params.text_document_position_params.position;
+
+        tracing::debug!("Hover requested: {:?} at {:?}", uri, lsp_position);
+
+        // Get the cached document content
+        let Some(content) = self.document_cache.get(&uri.to_string()) else {
+            tracing::warn!("No cached content for document: {:?}", uri);
+            return Ok(None);
+        };
+
+        // Find the workspace and project for this document
+        let Some((workspace_uri, project_idx)) = self.find_workspace_and_project(&uri) else {
+            tracing::warn!("No project found for document: {:?}", uri);
+            return Ok(None);
+        };
+
+        // Get the project
+        let Some(projects) = self.projects.get(&workspace_uri) else {
+            tracing::warn!("No projects loaded for workspace: {workspace_uri}");
+            return Ok(None);
+        };
+
+        let Some((_, project)) = projects.get(project_idx) else {
+            tracing::warn!("Project index {project_idx} not found in workspace {workspace_uri}");
+            return Ok(None);
+        };
+
+        // Convert LSP position to graphql-project Position (0-indexed)
+        let position = graphql_project::Position {
+            line: lsp_position.line as usize,
+            character: lsp_position.character as usize,
+        };
+
+        // Get hover info from the project
+        let Some(hover_info) = project.hover_info(&content, position) else {
+            return Ok(None);
+        };
+
+        // Convert to LSP Hover
+        #[allow(clippy::cast_possible_truncation)]
+        let hover = Hover {
+            contents: lsp_types::HoverContents::Markup(lsp_types::MarkupContent {
+                kind: lsp_types::MarkupKind::Markdown,
+                value: hover_info.contents,
+            }),
+            range: hover_info.range.map(|r| Range {
+                start: Position {
+                    line: r.start.line as u32,
+                    character: r.start.character as u32,
+                },
+                end: Position {
+                    line: r.end.line as u32,
+                    character: r.end.character as u32,
+                },
+            }),
+        };
+
+        Ok(Some(hover))
     }
 
     async fn goto_definition(

@@ -1,6 +1,7 @@
 mod diagnostics;
 mod document;
 mod error;
+mod hover;
 mod index;
 mod project;
 mod schema;
@@ -10,6 +11,7 @@ mod validation;
 pub use diagnostics::{Diagnostic, Position, Range, RelatedInfo, Severity};
 pub use document::DocumentLoader;
 pub use error::{ProjectError, Result};
+pub use hover::{HoverInfo, HoverProvider};
 pub use index::{DocumentIndex, FragmentInfo, OperationInfo, OperationType, SchemaIndex, TypeInfo};
 pub use project::GraphQLProject;
 pub use schema::SchemaLoader;

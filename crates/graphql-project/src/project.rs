@@ -1,5 +1,6 @@
 use crate::{
-    Diagnostic, DocumentIndex, DocumentLoader, Result, SchemaIndex, SchemaLoader, Validator,
+    Diagnostic, DocumentIndex, DocumentLoader, HoverInfo, HoverProvider, Position, Result,
+    SchemaIndex, SchemaLoader, Validator,
 };
 use apollo_compiler::validation::DiagnosticList;
 use graphql_config::{GraphQLConfig, ProjectConfig};
@@ -439,6 +440,17 @@ impl GraphQLProject {
         }
 
         diagnostics
+    }
+
+    /// Get hover information for a position in a GraphQL document
+    ///
+    /// Returns hover information (type info, descriptions, etc.) for the element
+    /// at the given position in the source code.
+    #[must_use]
+    pub fn hover_info(&self, source: &str, position: Position) -> Option<HoverInfo> {
+        let schema_index = self.schema_index.read().unwrap();
+        let hover_provider = HoverProvider::new();
+        hover_provider.hover(source, position, &schema_index)
     }
 
     /// Check if a file path matches the schema configuration
