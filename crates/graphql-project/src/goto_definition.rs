@@ -94,6 +94,19 @@ impl GotoDefinitionProvider {
         for definition in doc.definitions() {
             match definition {
                 cst::Definition::OperationDefinition(op) => {
+                    // Check if cursor is on the operation name itself
+                    if let Some(name) = op.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::OperationDefinition {
+                                operation_name: name.text().to_string(),
+                            });
+                        }
+                    }
+
                     if let Some(element) = Self::check_operation_definition(&op, byte_offset) {
                         return Some(element);
                     }
@@ -107,6 +120,19 @@ impl GotoDefinitionProvider {
                     }
                 }
                 cst::Definition::FragmentDefinition(frag) => {
+                    // Check if cursor is on the fragment definition name itself
+                    if let Some(frag_name) = frag.fragment_name().and_then(|n| n.name()) {
+                        let range = frag_name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::FragmentDefinition {
+                                fragment_name: frag_name.text().to_string(),
+                            });
+                        }
+                    }
+
                     if let Some(type_condition) = frag.type_condition() {
                         if let Some(named_type) = type_condition.named_type() {
                             if let Some(name) = named_type.name() {
@@ -482,6 +508,54 @@ impl GotoDefinitionProvider {
                         })
                         .collect()
                 }),
+            ElementType::FragmentDefinition { fragment_name } => {
+                // When on a fragment definition name, show all other definitions with the same name
+                document_index
+                    .get_fragments_by_name(&fragment_name)
+                    .map(|fragments| {
+                        fragments
+                            .iter()
+                            .map(|frag| {
+                                let range = Range {
+                                    start: Position {
+                                        line: frag.line,
+                                        character: frag.column,
+                                    },
+                                    end: Position {
+                                        line: frag.line,
+                                        character: frag.column + fragment_name.len(),
+                                    },
+                                };
+                                DefinitionLocation::new(frag.file_path.clone(), range)
+                            })
+                            .collect()
+                    })
+            }
+            ElementType::OperationDefinition { operation_name } => {
+                // When on an operation definition name, show all other definitions with the same name
+                document_index
+                    .get_operations(&operation_name)
+                    .map(|operations| {
+                        operations
+                            .iter()
+                            .filter_map(|op| {
+                                op.name.as_ref().map(|name| {
+                                    let range = Range {
+                                        start: Position {
+                                            line: op.line,
+                                            character: op.column,
+                                        },
+                                        end: Position {
+                                            line: op.line,
+                                            character: op.column + name.len(),
+                                        },
+                                    };
+                                    DefinitionLocation::new(op.file_path.clone(), range)
+                                })
+                            })
+                            .collect()
+                    })
+            }
             ElementType::TypeReference { .. } => {
                 // TODO: Implement type definition lookup in schema
                 // This would require tracking source locations in the schema
@@ -506,6 +580,8 @@ impl Default for GotoDefinitionProvider {
 #[derive(Debug, Clone, PartialEq)]
 enum ElementType {
     FragmentSpread { fragment_name: String },
+    FragmentDefinition { fragment_name: String },
+    OperationDefinition { operation_name: String },
     TypeReference { type_name: String },
     Variable { var_name: String },
 }
@@ -672,5 +748,108 @@ fragment UserFields on User {
 
         // For now this returns None since we haven't implemented schema definition lookup
         assert!(locations.is_none());
+    }
+
+    #[test]
+    fn test_goto_from_fragment_definition_name() {
+        let mut doc_index = DocumentIndex::new();
+        doc_index.add_fragment(
+            "UserFields".to_string(),
+            FragmentInfo {
+                name: "UserFields".to_string(),
+                type_condition: "User".to_string(),
+                file_path: "/path/to/file1.graphql".to_string(),
+                line: 0,
+                column: 9,
+            },
+        );
+        doc_index.add_fragment(
+            "UserFields".to_string(),
+            FragmentInfo {
+                name: "UserFields".to_string(),
+                type_condition: "User".to_string(),
+                file_path: "/path/to/file2.graphql".to_string(),
+                line: 5,
+                column: 9,
+            },
+        );
+
+        let schema = SchemaIndex::new();
+        let provider = GotoDefinitionProvider::new();
+
+        // Cursor on the fragment definition name itself
+        let document = r"
+fragment UserFields on User {
+    id
+    name
+}
+";
+
+        let position = Position {
+            line: 1,
+            character: 12, // On "UserFields" name
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find all definitions with this name");
+
+        // Should return both fragment definitions
+        assert_eq!(locations.len(), 2);
+        assert_eq!(locations[0].file_path, "/path/to/file1.graphql");
+        assert_eq!(locations[1].file_path, "/path/to/file2.graphql");
+    }
+
+    #[test]
+    fn test_goto_from_operation_definition_name() {
+        use crate::{OperationInfo, OperationType};
+
+        let mut doc_index = DocumentIndex::new();
+        doc_index.add_operation(
+            Some("GetUser".to_string()),
+            OperationInfo {
+                name: Some("GetUser".to_string()),
+                operation_type: OperationType::Query,
+                file_path: "/path/to/queries1.graphql".to_string(),
+                line: 0,
+                column: 6, // "query GetUser"
+            },
+        );
+        doc_index.add_operation(
+            Some("GetUser".to_string()),
+            OperationInfo {
+                name: Some("GetUser".to_string()),
+                operation_type: OperationType::Query,
+                file_path: "/path/to/queries2.graphql".to_string(),
+                line: 10,
+                column: 6,
+            },
+        );
+
+        let schema = SchemaIndex::new();
+        let provider = GotoDefinitionProvider::new();
+
+        // Cursor on the operation definition name itself
+        let document = r"
+query GetUser {
+    user {
+        id
+    }
+}
+";
+
+        let position = Position {
+            line: 1,
+            character: 8, // On "GetUser" name
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find all definitions with this name");
+
+        // Should return both operation definitions
+        assert_eq!(locations.len(), 2);
+        assert_eq!(locations[0].file_path, "/path/to/queries1.graphql");
+        assert_eq!(locations[1].file_path, "/path/to/queries2.graphql");
     }
 }
