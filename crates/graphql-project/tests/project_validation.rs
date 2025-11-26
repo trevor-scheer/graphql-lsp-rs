@@ -85,8 +85,7 @@ query GetUser($id: ID!) {
     let diagnostics = project.validate_document_source(document, "test.graphql");
     assert!(
         diagnostics.is_empty(),
-        "Valid query without fragments should have no errors: {:?}",
-        diagnostics
+        "Valid query without fragments should have no errors: {diagnostics:?}"
     );
 }
 
@@ -115,8 +114,7 @@ query GetPostsWithAuthors {
     // Should validate successfully
     assert!(
         diagnostics.is_empty(),
-        "Operation with valid nested fields should have no errors: {:?}",
-        diagnostics
+        "Operation with valid nested fields should have no errors: {diagnostics:?}"
     );
 }
 
@@ -141,8 +139,7 @@ fragment PostFields on Post {
     // Standalone fragments should be validated for schema correctness
     assert!(
         diagnostics.is_empty(),
-        "Valid standalone fragment should have no errors: {:?}",
-        diagnostics
+        "Valid standalone fragment should have no errors: {diagnostics:?}"
     );
 }
 
@@ -171,8 +168,7 @@ fragment InvalidPostFields on Post {
         error_messages
             .iter()
             .any(|msg| msg.contains("nonExistentField") || msg.contains("field")),
-        "Should have error about invalid field, got: {:?}",
-        error_messages
+        "Should have error about invalid field, got: {error_messages:?}"
     );
 }
 
@@ -195,8 +191,7 @@ query GetUsers {
 
     assert!(
         diagnostics.is_empty(),
-        "Valid operation without fragment spreads should have no errors: {:?}",
-        diagnostics
+        "Valid operation without fragment spreads should have no errors: {diagnostics:?}"
     );
 }
 
@@ -225,8 +220,7 @@ query GetUsers {
         error_messages
             .iter()
             .any(|msg| msg.contains("UndefinedFragment") || msg.contains("fragment")),
-        "Should have error about undefined fragment, got: {:?}",
-        error_messages
+        "Should have error about undefined fragment, got: {error_messages:?}"
     );
 }
 
@@ -236,7 +230,7 @@ async fn test_validate_extracted_documents_valid() {
     let base_path = temp_dir.path();
 
     // Write TypeScript file with simple query
-    let ts_content = r#"
+    let ts_content = r"
 import { gql } from '@apollo/client';
 
 const GET_USERS = gql`
@@ -252,7 +246,7 @@ const GET_USERS = gql`
     }
   }
 `;
-"#;
+";
 
     let ts_path = base_path.join("test.tsx");
     fs::write(&ts_path, ts_content).expect("Failed to write TypeScript file");
@@ -267,8 +261,7 @@ const GET_USERS = gql`
     // Should validate successfully
     assert!(
         diagnostics.is_empty(),
-        "Valid TypeScript should have no errors: {:?}",
-        diagnostics
+        "Valid TypeScript should have no errors: {diagnostics:?}"
     );
 }
 
@@ -278,7 +271,7 @@ async fn test_validate_extracted_documents_with_invalid_field() {
     let base_path = temp_dir.path();
 
     // Write TypeScript file with invalid field
-    let ts_content = r#"
+    let ts_content = r"
 import { gql } from '@apollo/client';
 
 const GET_USERS = gql`
@@ -290,7 +283,7 @@ const GET_USERS = gql`
     }
   }
 `;
-"#;
+";
 
     let ts_path = base_path.join("test_invalid.tsx");
     fs::write(&ts_path, ts_content).expect("Failed to write TypeScript file");
@@ -313,8 +306,7 @@ const GET_USERS = gql`
         error_messages
             .iter()
             .any(|msg| msg.contains("invalidField") || msg.contains("field")),
-        "Should have error about invalid field, got: {:?}",
-        error_messages
+        "Should have error about invalid field, got: {error_messages:?}"
     );
 }
 
@@ -324,7 +316,7 @@ async fn test_validate_extracted_documents_preserves_line_offsets() {
     let base_path = temp_dir.path();
 
     // Write TypeScript file with GraphQL at specific line
-    let ts_content = r#"
+    let ts_content = r"
 import { gql } from '@apollo/client';
 
 // Some code here
@@ -338,7 +330,7 @@ const GET_USERS = gql`
     }
   }
 `;
-"#;
+";
 
     let ts_path = base_path.join("test_offset.tsx");
     fs::write(&ts_path, ts_content).expect("Failed to write TypeScript file");
@@ -358,7 +350,6 @@ const GET_USERS = gql`
 
     assert!(
         has_offset_error,
-        "Error should preserve line offset from TypeScript file, got: {:?}",
-        diagnostics
+        "Error should preserve line offset from TypeScript file, got: {diagnostics:?}"
     );
 }
