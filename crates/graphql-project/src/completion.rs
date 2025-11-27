@@ -105,8 +105,27 @@ impl CompletionProvider {
         document_index: &DocumentIndex,
         schema_index: &SchemaIndex,
     ) -> Option<Vec<CompletionItem>> {
-        let parser = Parser::new(source);
-        let tree = parser.parse();
+        self.complete_with_ast(source, position, document_index, schema_index, None)
+    }
+
+    #[must_use]
+    #[allow(clippy::option_if_let_else)]
+    pub fn complete_with_ast(
+        &self,
+        source: &str,
+        position: Position,
+        document_index: &DocumentIndex,
+        schema_index: &SchemaIndex,
+        cached_ast: Option<&apollo_parser::SyntaxTree>,
+    ) -> Option<Vec<CompletionItem>> {
+        let tree_holder;
+        let tree = if let Some(ast) = cached_ast {
+            ast
+        } else {
+            let parser = Parser::new(source);
+            tree_holder = parser.parse();
+            &tree_holder
+        };
 
         let doc = tree.document();
         let byte_offset = Self::position_to_offset(source, position)?;

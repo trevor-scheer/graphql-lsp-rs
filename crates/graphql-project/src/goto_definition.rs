@@ -47,13 +47,41 @@ impl GotoDefinitionProvider {
         schema_index: &SchemaIndex,
         file_path: &str,
     ) -> Option<Vec<DefinitionLocation>> {
+        self.goto_definition_with_ast(
+            source,
+            position,
+            document_index,
+            schema_index,
+            file_path,
+            None,
+        )
+    }
+
+    /// Get definition location with an optional cached AST
+    #[must_use]
+    #[allow(clippy::option_if_let_else)]
+    pub fn goto_definition_with_ast(
+        &self,
+        source: &str,
+        position: Position,
+        document_index: &DocumentIndex,
+        schema_index: &SchemaIndex,
+        file_path: &str,
+        cached_ast: Option<&apollo_parser::SyntaxTree>,
+    ) -> Option<Vec<DefinitionLocation>> {
         tracing::info!(
             "GotoDefinitionProvider::goto_definition called with position: {:?}",
             position
         );
 
-        let parser = Parser::new(source);
-        let tree = parser.parse();
+        let tree_holder;
+        let tree = if let Some(ast) = cached_ast {
+            ast
+        } else {
+            let parser = Parser::new(source);
+            tree_holder = parser.parse();
+            &tree_holder
+        };
 
         let error_count = tree.errors().count();
         tracing::info!("Parser errors: {}", error_count);

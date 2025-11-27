@@ -724,6 +724,10 @@ pub struct DocumentIndex {
     /// Fragment definitions (name -> locations)
     /// Changed to Vec to track all occurrences for duplicate detection
     pub fragments: std::collections::HashMap<String, Vec<FragmentInfo>>,
+
+    /// Cached parsed ASTs for each document (`file_path` -> parsed `SyntaxTree`)
+    /// This eliminates the need to re-parse on every LSP request
+    pub parsed_asts: std::collections::HashMap<String, std::sync::Arc<apollo_parser::SyntaxTree>>,
 }
 
 #[derive(Debug, Clone)]
@@ -795,6 +799,22 @@ impl DocumentIndex {
     #[must_use]
     pub fn get_fragment(&self, name: &str) -> Option<&FragmentInfo> {
         self.fragments.get(name).and_then(|frags| frags.first())
+    }
+
+    /// Cache a parsed AST for a document
+    pub fn cache_ast(&mut self, file_path: String, ast: std::sync::Arc<apollo_parser::SyntaxTree>) {
+        self.parsed_asts.insert(file_path, ast);
+    }
+
+    /// Get a cached parsed AST for a document
+    #[must_use]
+    pub fn get_ast(&self, file_path: &str) -> Option<std::sync::Arc<apollo_parser::SyntaxTree>> {
+        self.parsed_asts.get(file_path).cloned()
+    }
+
+    /// Remove cached AST for a document
+    pub fn remove_ast(&mut self, file_path: &str) {
+        self.parsed_asts.remove(file_path);
     }
 
     /// Check for duplicate operation and fragment names across the project

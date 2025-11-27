@@ -145,6 +145,7 @@ impl GraphQLProject {
         DocumentIndex {
             operations: index.operations.clone(),
             fragments: index.fragments.clone(),
+            parsed_asts: index.parsed_asts.clone(),
         }
     }
 
@@ -156,6 +157,7 @@ impl GraphQLProject {
     /// without needing to reload all files from disk.
     #[allow(clippy::significant_drop_tightening)]
     pub fn update_document_index(&self, file_path: &str, content: &str) -> Result<()> {
+        use apollo_parser::Parser;
         use graphql_extract::{extract_from_source, ExtractConfig, Language};
         use std::path::Path;
 
@@ -169,6 +171,10 @@ impl GraphQLProject {
                 _ => Language::GraphQL,
             },
         );
+
+        // Parse the full content once and cache it
+        let parsed = Parser::new(content).parse();
+        let parsed_arc = std::sync::Arc::new(parsed);
 
         // Extract GraphQL from the content
         let extracted = extract_from_source(content, language, &ExtractConfig::default())
@@ -187,6 +193,9 @@ impl GraphQLProject {
                 frags.retain(|frag| frag.file_path != file_path);
                 !frags.is_empty()
             });
+
+            // Cache the parsed AST
+            document_index.cache_ast(file_path.to_string(), parsed_arc);
 
             // Parse and index each extracted GraphQL block
             for item in extracted {
@@ -484,19 +493,39 @@ impl GraphQLProject {
     /// Returns hover information (type info, descriptions, etc.) for the element
     /// at the given position in the source code.
     #[must_use]
-    pub fn hover_info(&self, source: &str, position: Position) -> Option<HoverInfo> {
+    pub fn hover_info(
+        &self,
+        source: &str,
+        position: Position,
+        file_path: &str,
+    ) -> Option<HoverInfo> {
         let schema_index = self.schema_index.read().unwrap();
+        let cached_ast = self.document_index.read().unwrap().get_ast(file_path);
         let hover_provider = HoverProvider::new();
-        hover_provider.hover(source, position, &schema_index)
+
+        hover_provider.hover_with_ast(source, position, &schema_index, cached_ast.as_deref())
     }
 
     /// Get completion items for a position in a GraphQL document
     #[must_use]
-    pub fn complete(&self, source: &str, position: Position) -> Option<Vec<CompletionItem>> {
+    pub fn complete(
+        &self,
+        source: &str,
+        position: Position,
+        file_path: &str,
+    ) -> Option<Vec<CompletionItem>> {
+        let cached_ast = self.document_index.read().unwrap().get_ast(file_path);
         let document_index = self.document_index.read().unwrap();
         let schema_index = self.schema_index.read().unwrap();
         let completion_provider = CompletionProvider::new();
-        completion_provider.complete(source, position, &document_index, &schema_index)
+
+        completion_provider.complete_with_ast(
+            source,
+            position,
+            &document_index,
+            &schema_index,
+            cached_ast.as_deref(),
+        )
     }
 
     /// Get definition locations for a position in a GraphQL document
@@ -511,10 +540,19 @@ impl GraphQLProject {
         position: Position,
         file_path: &str,
     ) -> Option<Vec<DefinitionLocation>> {
+        let cached_ast = self.document_index.read().unwrap().get_ast(file_path);
         let document_index = self.document_index.read().unwrap();
         let schema_index = self.schema_index.read().unwrap();
         let provider = GotoDefinitionProvider::new();
-        provider.goto_definition(source, position, &document_index, &schema_index, file_path)
+
+        provider.goto_definition_with_ast(
+            source,
+            position,
+            &document_index,
+            &schema_index,
+            file_path,
+            cached_ast.as_deref(),
+        )
     }
 
     /// Find all references to the element at a position in a GraphQL document

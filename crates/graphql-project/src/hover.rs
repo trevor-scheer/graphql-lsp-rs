@@ -83,8 +83,27 @@ impl HoverProvider {
         position: Position,
         schema_index: &SchemaIndex,
     ) -> Option<HoverInfo> {
-        let parser = Parser::new(source);
-        let tree = parser.parse();
+        self.hover_with_ast(source, position, schema_index, None)
+    }
+
+    /// Get hover information with an optional cached AST
+    #[must_use]
+    #[allow(clippy::option_if_let_else)]
+    pub fn hover_with_ast(
+        &self,
+        source: &str,
+        position: Position,
+        schema_index: &SchemaIndex,
+        cached_ast: Option<&apollo_parser::SyntaxTree>,
+    ) -> Option<HoverInfo> {
+        let tree_holder;
+        let tree = if let Some(ast) = cached_ast {
+            ast
+        } else {
+            let parser = Parser::new(source);
+            tree_holder = parser.parse();
+            &tree_holder
+        };
 
         // If there are syntax errors, we may not be able to provide accurate hover info
         if tree.errors().count() > 0 {

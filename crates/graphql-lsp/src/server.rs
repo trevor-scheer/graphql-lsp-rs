@@ -507,7 +507,8 @@ impl LanguageServer for GraphQLLanguageServer {
             character: lsp_position.character as usize,
         };
 
-        let Some(items) = project.complete(&content, position) else {
+        let file_path = uri.to_string();
+        let Some(items) = project.complete(&content, position, &file_path) else {
             return Ok(None);
         };
 
@@ -599,7 +600,8 @@ impl LanguageServer for GraphQLLanguageServer {
         };
 
         // Get hover info from the project
-        let Some(hover_info) = project.hover_info(&content, position) else {
+        let file_path = uri.to_string();
+        let Some(hover_info) = project.hover_info(&content, position, &file_path) else {
             return Ok(None);
         };
 
