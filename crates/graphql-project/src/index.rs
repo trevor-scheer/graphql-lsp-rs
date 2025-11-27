@@ -32,6 +32,40 @@ impl SchemaIndex {
         }
     }
 
+    /// Build index from multiple schema files using apollo-compiler
+    ///
+    /// Uses `SchemaBuilder` to parse each file separately, preserving source locations.
+    ///
+    /// # Returns
+    ///
+    /// A `SchemaIndex` with the parsed schema, or an empty schema if parsing fails.
+    #[must_use]
+    pub fn from_schema_files(schema_files: Vec<(String, String)>) -> Self {
+        use apollo_compiler::schema::SchemaBuilder;
+
+        if schema_files.is_empty() {
+            return Self::new();
+        }
+
+        let mut builder = SchemaBuilder::new();
+
+        // Parse each file separately so apollo-compiler tracks sources correctly
+        for (path, content) in schema_files {
+            builder = builder.parse(content, path);
+        }
+
+        // Build the schema
+        match builder.build() {
+            Ok(schema) => Self {
+                schema: Arc::new(schema),
+            },
+            Err(diagnostics) => {
+                tracing::warn!("Failed to build schema: {:?}", diagnostics);
+                Self::new()
+            }
+        }
+    }
+
     /// Build index from schema string using apollo-compiler
     ///
     /// Parses and validates the GraphQL schema using apollo-compiler,
@@ -42,16 +76,7 @@ impl SchemaIndex {
     /// A `SchemaIndex` with the parsed schema, or an empty schema if parsing fails.
     #[must_use]
     pub fn from_schema(schema_str: &str) -> Self {
-        match Schema::parse(schema_str, "schema.graphql") {
-            Ok(schema) => Self {
-                schema: Arc::new(schema),
-            },
-            Err(_diagnostics) => {
-                // Return empty schema on error
-                // TODO: Convert diagnostics to LSP diagnostics
-                Self::new()
-            }
-        }
+        Self::from_schema_files(vec![("schema.graphql".to_string(), schema_str.to_string())])
     }
 
     /// Get the underlying apollo-compiler Schema
@@ -123,6 +148,82 @@ impl SchemaIndex {
                 .collect(),
         })
     }
+
+    /// Find the location of a field definition in the schema source
+    ///
+    /// Returns the line, column (0-indexed), and file path where the field is defined
+    /// in the schema source using apollo-compiler's built-in location tracking.
+    #[must_use]
+    pub fn find_field_definition(
+        &self,
+        type_name: &str,
+        field_name: &str,
+    ) -> Option<FieldDefinitionLocation> {
+        use apollo_compiler::schema::ExtendedType;
+
+        // Get the type from the schema
+        let extended_type = self.schema.types.get(type_name)?;
+
+        // Extract fields based on type kind
+        let fields = match extended_type {
+            ExtendedType::Object(obj) => &obj.fields,
+            ExtendedType::Interface(iface) => &iface.fields,
+            _ => return None,
+        };
+
+        // Find the field
+        let field_component = fields.get(field_name)?;
+        let field_node = &field_component.node;
+
+        // Get the location from the Node
+        let location = field_node.location()?;
+
+        // Convert to line/column using the schema's source map
+        let line_col_range = field_node.line_column_range(&self.schema.sources)?;
+
+        tracing::info!(
+            "Apollo compiler line_col_range for {}.{}: start.line={}, start.column={}",
+            type_name,
+            field_name,
+            line_col_range.start.line,
+            line_col_range.start.column
+        );
+
+        // Get the file path from the source map
+        let file_id = location.file_id();
+        let file_path = self
+            .schema
+            .sources
+            .get(&file_id)?
+            .path()
+            .to_string_lossy()
+            .to_string();
+
+        let result_line = line_col_range.start.line.saturating_sub(1);
+        let result_col = line_col_range.start.column.saturating_sub(1);
+
+        tracing::info!(
+            "After converting to 0-indexed: line={}, col={}",
+            result_line,
+            result_col
+        );
+
+        Some(FieldDefinitionLocation {
+            line: result_line,  // Convert to 0-indexed
+            column: result_col, // Convert to 0-indexed
+            field_name: field_name.to_string(),
+            file_path,
+        })
+    }
+}
+
+/// Location information for a field definition in schema
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldDefinitionLocation {
+    pub line: usize,
+    pub column: usize,
+    pub field_name: String,
+    pub file_path: String,
 }
 
 /// Type information extracted from schema

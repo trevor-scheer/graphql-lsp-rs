@@ -23,45 +23,57 @@ impl SchemaLoader {
         self
     }
 
-    /// Load schema as a string
-    pub async fn load(&self) -> Result<String> {
+    /// Load schema files with their paths for proper source tracking
+    pub async fn load_with_paths(&self) -> Result<Vec<(String, String)>> {
         // Include Apollo Client built-in directives
-        // These are client-side directives that don't need to be in the server schema
         const APOLLO_CLIENT_BUILTINS: &str =
             include_str!("../../graphql-cli/src/apollo_client_builtins.graphql");
 
-        let mut schema_parts = Vec::new();
-        schema_parts.push(APOLLO_CLIENT_BUILTINS.to_string());
+        let mut schema_files = Vec::new();
+        schema_files.push((
+            "apollo_client_builtins.graphql".to_string(),
+            APOLLO_CLIENT_BUILTINS.to_string(),
+        ));
 
         for path in self.config.paths() {
             if path.starts_with("http://") || path.starts_with("https://") {
                 // Remote schema via introspection
                 let schema = self.load_remote(path).await?;
-                schema_parts.push(schema);
+                schema_files.push((path.to_string(), schema));
             } else {
                 // Local file(s) - may include globs
-                let schemas = self.load_local(path)?;
-                schema_parts.extend(schemas);
+                let files = self.load_local_with_paths(path)?;
+                schema_files.extend(files);
             }
         }
 
-        if schema_parts.is_empty() {
+        if schema_files.is_empty() {
             return Err(ProjectError::SchemaLoad(
                 "No schema files found".to_string(),
             ));
         }
 
-        Ok(schema_parts.join("\n\n"))
+        Ok(schema_files)
     }
 
-    /// Load schema from local file(s), supporting glob patterns
-    fn load_local(&self, pattern: &str) -> Result<Vec<String>> {
+    /// Load schema as a string
+    pub async fn load(&self) -> Result<String> {
+        let files = self.load_with_paths().await?;
+        Ok(files
+            .into_iter()
+            .map(|(_, content)| content)
+            .collect::<Vec<_>>()
+            .join("\n\n"))
+    }
+
+    /// Load schema from local file(s) with paths, supporting glob patterns
+    fn load_local_with_paths(&self, pattern: &str) -> Result<Vec<(String, String)>> {
         let pattern = self.base_path.as_ref().map_or_else(
             || pattern.to_string(),
             |base| base.join(pattern).display().to_string(),
         );
 
-        let mut schemas = Vec::new();
+        let mut schema_files = Vec::new();
 
         // Try as glob pattern first
         match glob::glob(&pattern) {
@@ -72,7 +84,8 @@ impl SchemaLoader {
                         Ok(path) => {
                             found_any = true;
                             let content = std::fs::read_to_string(&path)?;
-                            schemas.push(content);
+                            let path_str = path.display().to_string();
+                            schema_files.push((path_str, content));
                         }
                         Err(e) => {
                             return Err(ProjectError::SchemaLoad(format!("Glob error: {e}")));
@@ -93,7 +106,17 @@ impl SchemaLoader {
             }
         }
 
-        Ok(schemas)
+        Ok(schema_files)
+    }
+
+    /// Load schema from local file(s), supporting glob patterns
+    #[allow(dead_code)]
+    fn load_local(&self, pattern: &str) -> Result<Vec<String>> {
+        Ok(self
+            .load_local_with_paths(pattern)?
+            .into_iter()
+            .map(|(_, content)| content)
+            .collect())
     }
 
     /// Load schema from remote endpoint via introspection

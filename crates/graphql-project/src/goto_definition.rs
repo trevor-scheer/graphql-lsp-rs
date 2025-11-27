@@ -46,19 +46,41 @@ impl GotoDefinitionProvider {
         document_index: &DocumentIndex,
         schema_index: &SchemaIndex,
     ) -> Option<Vec<DefinitionLocation>> {
+        tracing::info!(
+            "GotoDefinitionProvider::goto_definition called with position: {:?}",
+            position
+        );
+
         let parser = Parser::new(source);
         let tree = parser.parse();
 
-        if tree.errors().count() > 0 {
+        let error_count = tree.errors().count();
+        tracing::info!("Parser errors: {}", error_count);
+        if error_count > 0 {
+            tracing::info!("Returning None due to parser errors");
             return None;
         }
 
         let doc = tree.document();
-        let byte_offset = Self::position_to_offset(source, position)?;
+        let byte_offset = Self::position_to_offset(source, position);
+        tracing::info!("Byte offset: {:?}", byte_offset);
+        if byte_offset.is_none() {
+            tracing::info!("Returning None - could not convert position to offset");
+            return None;
+        }
+        let byte_offset = byte_offset?;
 
-        let element_type = Self::find_element_at_position(&doc, byte_offset)?;
+        let element_type = Self::find_element_at_position(&doc, byte_offset, source, schema_index);
+        tracing::info!("Element type: {:?}", element_type);
+        if element_type.is_none() {
+            tracing::info!("Returning None - no element found at position");
+            return None;
+        }
+        let element_type = element_type?;
 
-        Self::resolve_definition(element_type, document_index, schema_index)
+        let result = Self::resolve_definition(element_type, document_index, schema_index);
+        tracing::info!("resolve_definition returned: {:?}", result.is_some());
+        result
     }
 
     /// Convert a line/column position to a byte offset
@@ -90,7 +112,12 @@ impl GotoDefinitionProvider {
     }
 
     /// Find the GraphQL element at the given byte offset
-    fn find_element_at_position(doc: &cst::Document, byte_offset: usize) -> Option<ElementType> {
+    fn find_element_at_position(
+        doc: &cst::Document,
+        byte_offset: usize,
+        source: &str,
+        schema_index: &SchemaIndex,
+    ) -> Option<ElementType> {
         for definition in doc.definitions() {
             match definition {
                 cst::Definition::OperationDefinition(op) => {
@@ -112,9 +139,14 @@ impl GotoDefinitionProvider {
                     }
 
                     if let Some(selection_set) = op.selection_set() {
-                        if let Some(element) =
-                            Self::check_selection_set(&selection_set, byte_offset)
-                        {
+                        let root_type = Self::get_operation_root_type(&op, schema_index);
+                        if let Some(element) = Self::check_selection_set(
+                            &selection_set,
+                            byte_offset,
+                            root_type,
+                            source,
+                            schema_index,
+                        ) {
                             return Some(element);
                         }
                     }
@@ -150,9 +182,20 @@ impl GotoDefinitionProvider {
                     }
 
                     if let Some(selection_set) = frag.selection_set() {
-                        if let Some(element) =
-                            Self::check_selection_set(&selection_set, byte_offset)
-                        {
+                        let type_condition = frag
+                            .type_condition()
+                            .and_then(|tc| tc.named_type())
+                            .and_then(|nt| nt.name())
+                            .map(|n| n.text().to_string())
+                            .unwrap_or_default();
+
+                        if let Some(element) = Self::check_selection_set(
+                            &selection_set,
+                            byte_offset,
+                            type_condition,
+                            source,
+                            schema_index,
+                        ) {
                             return Some(element);
                         }
                     }
@@ -216,14 +259,59 @@ impl GotoDefinitionProvider {
         None
     }
 
+    /// Get the root type for an operation (Query, Mutation, or Subscription)
+    fn get_operation_root_type(
+        op: &cst::OperationDefinition,
+        schema_index: &SchemaIndex,
+    ) -> String {
+        let root_type_name = op.operation_type().map_or_else(
+            || schema_index.schema().schema_definition.query.as_ref(),
+            |op_type| {
+                if op_type.query_token().is_some() {
+                    schema_index.schema().schema_definition.query.as_ref()
+                } else if op_type.mutation_token().is_some() {
+                    schema_index.schema().schema_definition.mutation.as_ref()
+                } else if op_type.subscription_token().is_some() {
+                    schema_index
+                        .schema()
+                        .schema_definition
+                        .subscription
+                        .as_ref()
+                } else {
+                    schema_index.schema().schema_definition.query.as_ref()
+                }
+            },
+        );
+
+        root_type_name.map_or_else(|| "Query".to_string(), std::string::ToString::to_string)
+    }
+
     /// Check if the byte offset is within a selection set
+    #[allow(clippy::only_used_in_recursion)]
     fn check_selection_set(
         selection_set: &cst::SelectionSet,
         byte_offset: usize,
+        parent_type: String,
+        source: &str,
+        schema_index: &SchemaIndex,
     ) -> Option<ElementType> {
         for selection in selection_set.selections() {
             match selection {
                 cst::Selection::Field(field) => {
+                    // Check if we're on the field name itself
+                    if let Some(name) = field.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::FieldReference {
+                                field_name: name.text().to_string(),
+                                parent_type,
+                            });
+                        }
+                    }
+
                     if let Some(arguments) = field.arguments() {
                         for arg in arguments.arguments() {
                             if let Some(value) = arg.value() {
@@ -237,10 +325,37 @@ impl GotoDefinitionProvider {
                     }
 
                     if let Some(nested_selection_set) = field.selection_set() {
-                        if let Some(element) =
-                            Self::check_selection_set(&nested_selection_set, byte_offset)
-                        {
-                            return Some(element);
+                        // Resolve the field type from the schema
+                        let field_name = field
+                            .name()
+                            .map(|n| n.text().to_string())
+                            .unwrap_or_default();
+                        let nested_type = schema_index.get_fields(&parent_type).map_or_else(
+                            String::new,
+                            |fields| {
+                                fields
+                                    .iter()
+                                    .find(|f| f.name == field_name)
+                                    .map(|f| {
+                                        // Extract base type name (strip [], !)
+                                        f.type_name
+                                            .trim_matches(|c| c == '[' || c == ']' || c == '!')
+                                            .to_string()
+                                    })
+                                    .unwrap_or_default()
+                            },
+                        );
+
+                        if !nested_type.is_empty() {
+                            if let Some(element) = Self::check_selection_set(
+                                &nested_selection_set,
+                                byte_offset,
+                                nested_type,
+                                source,
+                                schema_index,
+                            ) {
+                                return Some(element);
+                            }
                         }
                     }
                 }
@@ -275,9 +390,20 @@ impl GotoDefinitionProvider {
                     }
 
                     if let Some(nested_selection_set) = inline_frag.selection_set() {
-                        if let Some(element) =
-                            Self::check_selection_set(&nested_selection_set, byte_offset)
-                        {
+                        // Use type condition if present, otherwise use parent type
+                        let nested_type = inline_frag
+                            .type_condition()
+                            .and_then(|tc| tc.named_type())
+                            .and_then(|nt| nt.name())
+                            .map_or_else(|| parent_type.clone(), |n| n.text().to_string());
+
+                        if let Some(element) = Self::check_selection_set(
+                            &nested_selection_set,
+                            byte_offset,
+                            nested_type,
+                            source,
+                            schema_index,
+                        ) {
                             return Some(element);
                         }
                     }
@@ -485,7 +611,7 @@ impl GotoDefinitionProvider {
     fn resolve_definition(
         element_type: ElementType,
         document_index: &DocumentIndex,
-        _schema_index: &SchemaIndex,
+        schema_index: &SchemaIndex,
     ) -> Option<Vec<DefinitionLocation>> {
         match element_type {
             ElementType::FragmentSpread { fragment_name } => document_index
@@ -566,6 +692,26 @@ impl GotoDefinitionProvider {
                 // This would require finding the operation's variable definition
                 None
             }
+            ElementType::FieldReference {
+                field_name,
+                parent_type,
+            } => {
+                // Find the field definition in the schema
+                let field_def = schema_index.find_field_definition(&parent_type, &field_name)?;
+
+                let range = Range {
+                    start: Position {
+                        line: field_def.line,
+                        character: field_def.column,
+                    },
+                    end: Position {
+                        line: field_def.line,
+                        character: field_def.column + field_name.len(),
+                    },
+                };
+
+                Some(vec![DefinitionLocation::new(field_def.file_path, range)])
+            }
         }
     }
 }
@@ -579,11 +725,25 @@ impl Default for GotoDefinitionProvider {
 /// Type of GraphQL element at a position
 #[derive(Debug, Clone, PartialEq)]
 enum ElementType {
-    FragmentSpread { fragment_name: String },
-    FragmentDefinition { fragment_name: String },
-    OperationDefinition { operation_name: String },
-    TypeReference { type_name: String },
-    Variable { var_name: String },
+    FragmentSpread {
+        fragment_name: String,
+    },
+    FragmentDefinition {
+        fragment_name: String,
+    },
+    OperationDefinition {
+        operation_name: String,
+    },
+    TypeReference {
+        type_name: String,
+    },
+    Variable {
+        var_name: String,
+    },
+    FieldReference {
+        field_name: String,
+        parent_type: String,
+    },
 }
 
 #[cfg(test)]
@@ -605,7 +765,17 @@ mod tests {
             },
         );
 
-        let schema = SchemaIndex::new();
+        let schema_str = r"
+type Query {
+  user: User
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+";
+        let schema = SchemaIndex::from_schema(schema_str);
         let provider = GotoDefinitionProvider::new();
 
         let document = r"
@@ -655,7 +825,16 @@ query GetUser {
             },
         );
 
-        let schema = SchemaIndex::new();
+        let schema_str = r"
+type Query {
+  user: User
+}
+
+type User {
+  id: ID!
+}
+";
+        let schema = SchemaIndex::from_schema(schema_str);
         let provider = GotoDefinitionProvider::new();
 
         let document = r"
@@ -851,5 +1030,139 @@ query GetUser {
         assert_eq!(locations.len(), 2);
         assert_eq!(locations[0].file_path, "/path/to/queries1.graphql");
         assert_eq!(locations[1].file_path, "/path/to/queries2.graphql");
+    }
+
+    #[test]
+    fn test_goto_field_definition() {
+        let doc_index = DocumentIndex::new();
+
+        // Create a schema with field location tracking
+        let schema_str = r"
+type Query {
+  user(id: ID!): User
+  posts: [Post!]!
+}
+
+type User {
+  id: ID!
+  name: String!
+  email: String!
+}
+
+type Post {
+  id: ID!
+  title: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Document with a query
+        let document = r#"
+query GetUser {
+    user(id: "1") {
+        id
+        name
+    }
+}
+"#;
+
+        // Position on "user" field (line 2, column 4)
+        let position = Position {
+            line: 2,
+            character: 4,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find field definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "user" field is on line 2 (0-indexed: line 1), column 2
+        assert_eq!(locations[0].range.start.line, 2);
+        assert_eq!(locations[0].range.start.character, 2);
+    }
+
+    #[test]
+    fn test_field_position_calculation() {
+        let schema_str = r"type Query {
+  user(id: ID!): User
+  post(id: ID!): Post
+}
+
+type User {
+  id: ID!
+  name: String!
+  posts: [Post!]!
+}";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+
+        // Test user field - should be at line 1 (0-indexed), column 2
+        let user_field = schema.find_field_definition("Query", "user");
+        assert!(user_field.is_some());
+        let user_field = user_field.unwrap();
+        println!(
+            "user field: line={}, col={}",
+            user_field.line, user_field.column
+        );
+        assert_eq!(user_field.line, 1); // Line 2 in 1-indexed = line 1 in 0-indexed
+        assert_eq!(user_field.column, 2); // Column 3 in 1-indexed = column 2 in 0-indexed
+
+        // Test name field in User - should be at line 7 (0-indexed), column 2
+        let name_field = schema.find_field_definition("User", "name");
+        assert!(name_field.is_some());
+        let name_field = name_field.unwrap();
+        println!(
+            "name field: line={}, col={}",
+            name_field.line, name_field.column
+        );
+        assert_eq!(name_field.line, 7); // Line 8 in 1-indexed = line 7 in 0-indexed
+        assert_eq!(name_field.column, 2);
+    }
+
+    #[test]
+    fn test_goto_nested_field_definition() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type Query {
+  user(id: ID!): User
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r#"
+query GetUser {
+    user(id: "1") {
+        name
+    }
+}
+"#;
+
+        // Position on "name" field (line 3, column 8)
+        let position = Position {
+            line: 3,
+            character: 8,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find nested field definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "name" field in User type
+        assert_eq!(locations[0].range.start.line, 7);
+        assert_eq!(locations[0].range.start.character, 2);
     }
 }

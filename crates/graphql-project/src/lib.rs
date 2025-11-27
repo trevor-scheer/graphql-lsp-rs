@@ -14,7 +14,10 @@ pub use document::DocumentLoader;
 pub use error::{ProjectError, Result};
 pub use goto_definition::{DefinitionLocation, GotoDefinitionProvider};
 pub use hover::{HoverInfo, HoverProvider};
-pub use index::{DocumentIndex, FragmentInfo, OperationInfo, OperationType, SchemaIndex, TypeInfo};
+pub use index::{
+    DocumentIndex, FieldDefinitionLocation, FragmentInfo, OperationInfo, OperationType,
+    SchemaIndex, TypeInfo,
+};
 pub use project::GraphQLProject;
 pub use schema::SchemaLoader;
 pub use validation::Validator;

@@ -559,7 +559,7 @@ impl LanguageServer for GraphQLLanguageServer {
         let uri = params.text_document_position_params.text_document.uri;
         let lsp_position = params.text_document_position_params.position;
 
-        tracing::debug!(
+        tracing::info!(
             "Go to definition requested: {:?} at {:?}",
             uri,
             lsp_position
@@ -659,7 +659,17 @@ impl LanguageServer for GraphQLLanguageServer {
                     let lsp_locations: Vec<Location> = locations
                         .iter()
                         .filter_map(|loc| {
-                            let file_uri = Uri::from_file_path(&loc.file_path)?;
+                            // Resolve the file path relative to the workspace if it's not absolute
+                            let file_path = if std::path::Path::new(&loc.file_path).is_absolute() {
+                                std::path::PathBuf::from(&loc.file_path)
+                            } else {
+                                // Resolve relative to workspace root
+                                let workspace_path: Uri = workspace_uri.parse().ok()?;
+                                let workspace_file_path = workspace_path.to_file_path()?;
+                                workspace_file_path.join(&loc.file_path)
+                            };
+
+                            let file_uri = Uri::from_file_path(file_path)?;
                             Some(Location {
                                 uri: file_uri,
                                 range: Range {
@@ -691,21 +701,53 @@ impl LanguageServer for GraphQLLanguageServer {
             character: lsp_position.character as usize,
         };
 
+        tracing::info!(
+            "Calling project.goto_definition with position: {:?}",
+            position
+        );
+        tracing::info!("Content length: {} bytes", content.len());
+
         // Get definition locations from the project
         let Some(locations) = project.goto_definition(&content, position) else {
-            tracing::debug!("No definition found at position {:?}", position);
+            tracing::info!(
+                "project.goto_definition returned None at position {:?}",
+                position
+            );
             return Ok(None);
         };
 
-        tracing::debug!("Found {} definition location(s)", locations.len());
+        tracing::info!("Found {} definition location(s)", locations.len());
+        for (idx, loc) in locations.iter().enumerate() {
+            tracing::info!(
+                "Location {}: file={}, line={}, col={}",
+                idx,
+                loc.file_path,
+                loc.range.start.line,
+                loc.range.start.character
+            );
+        }
 
         // Convert to LSP Locations
         #[allow(clippy::cast_possible_truncation)]
         let lsp_locations: Vec<Location> = locations
             .iter()
             .filter_map(|loc| {
-                let file_uri = Uri::from_file_path(&loc.file_path)?;
-                Some(Location {
+                // Resolve the file path relative to the workspace if it's not absolute
+                let file_path = if std::path::Path::new(&loc.file_path).is_absolute() {
+                    std::path::PathBuf::from(&loc.file_path)
+                } else {
+                    // Resolve relative to workspace root
+                    let workspace_path: Uri = workspace_uri.parse().ok()?;
+                    let workspace_file_path = workspace_path.to_file_path()?;
+                    workspace_file_path.join(&loc.file_path)
+                };
+
+                tracing::info!("Resolved file path: {:?}", file_path);
+
+                let file_uri = Uri::from_file_path(&file_path)?;
+                tracing::info!("Created URI: {:?}", file_uri);
+
+                let lsp_loc = Location {
                     uri: file_uri,
                     range: Range {
                         start: Position {
@@ -717,7 +759,13 @@ impl LanguageServer for GraphQLLanguageServer {
                             character: loc.range.end.character as u32,
                         },
                     },
-                })
+                };
+                tracing::info!(
+                    "LSP Location: uri={:?}, range={:?}",
+                    lsp_loc.uri,
+                    lsp_loc.range
+                );
+                Some(lsp_loc)
             })
             .collect();
 

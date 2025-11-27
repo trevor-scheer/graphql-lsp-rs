@@ -65,10 +65,17 @@ impl GraphQLProject {
     /// Load the schema from configured sources
     pub async fn load_schema(&self) -> Result<()> {
         let loader = SchemaLoader::new(self.config.schema.clone());
-        let schema_content = loader.load().await?;
+        let schema_files = loader.load_with_paths().await?;
 
-        // Build index from schema
-        let index = SchemaIndex::from_schema(&schema_content);
+        // Build index from schema files (preserves source locations per file)
+        let index = SchemaIndex::from_schema_files(schema_files.clone());
+
+        // Also keep the joined content for backwards compatibility
+        let schema_content = schema_files
+            .iter()
+            .map(|(_, content)| content.as_str())
+            .collect::<Vec<_>>()
+            .join("\n\n");
 
         // Update state
         {

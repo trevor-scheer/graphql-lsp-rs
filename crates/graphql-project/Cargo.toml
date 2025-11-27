@@ -35,6 +35,9 @@ reqwest = { workspace = true }
 # Concurrency
 dashmap = { workspace = true }
 
+# Logging
+tracing = "0.1"
+
 [dev-dependencies]
 insta = { version = "1.44.1", features = ["yaml"] }
 tempfile = "3.0"
