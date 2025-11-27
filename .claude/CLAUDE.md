@@ -25,6 +25,30 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - Ensure `cargo test` passes
 - Pre-commit hooks are set up via cargo-husky
 
+## Versioning and Releases
+
+This project uses [changesets](https://github.com/knope-dev/changesets) for version management and changelog generation.
+
+### Creating a Changeset
+
+When making changes that should be released:
+
+```bash
+changesets add
+```
+
+This will prompt you to select affected packages, bump type (major/minor/patch), and write a description.
+
+### Releasing
+
+To version packages and update changelogs:
+
+```bash
+changesets version
+```
+
+See [.changesets/README.md](.changesets/README.md) for complete documentation.
+
 ## PR Guidelines
 
 - Don't include notes about testing or linting passing in PR descriptions

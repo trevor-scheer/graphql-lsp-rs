@@ -1,0 +1,13 @@
+{
+  "$schema": "https://raw.githubusercontent.com/knope-dev/changesets/main/schema.json",
+  "packages": {
+    "graphql-lsp": {
+      "path": "crates/graphql-lsp",
+      "changelog": "crates/graphql-lsp/CHANGELOG.md"
+    },
+    "graphql-language-service": {
+      "path": "crates/graphql-language-service",
+      "changelog": "crates/graphql-language-service/CHANGELOG.md"
+    }
+  }
+}
