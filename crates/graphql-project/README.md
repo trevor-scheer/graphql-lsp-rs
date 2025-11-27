@@ -64,7 +64,15 @@ GraphQL validation ([src/validation.rs](src/validation.rs)):
 
 ### Language Features
 
-- **Goto Definition** ([src/goto_definition.rs](src/goto_definition.rs)): Navigate from fragment spreads to definitions
+- **Goto Definition** ([src/goto_definition.rs](src/goto_definition.rs)): Comprehensive navigation support
+  - Fragment spreads and definitions
+  - Operation names
+  - Type references (fragments, inline fragments, implements, unions, fields, variables)
+  - Field references to schema definitions
+  - Variable references to operation variable definitions
+  - Argument names to schema argument definitions
+  - Enum values to their definitions
+  - Directive names and their arguments
 - **Hover** ([src/hover.rs](src/hover.rs)): Type information and documentation
 
 ## Usage

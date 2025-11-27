@@ -49,13 +49,20 @@ Core library providing validation, indexing, and diagnostics.
 ### graphql-lsp
 Language Server Protocol implementation for GraphQL.
 
-**Features (planned):**
-- Real-time validation
-- Go-to-definition
+**Implemented Features:**
+- Real-time validation with project-wide diagnostics
+- Comprehensive go-to-definition support:
+  - Fragment spreads, operations, types, fields
+  - Variables, arguments, enum values
+  - Directives and directive arguments
+- Hover information for types and fields
+- Works with embedded GraphQL in TypeScript/JavaScript
+
+**Planned Features:**
 - Find references
 - Autocomplete
-- Hover information
 - Document symbols
+- Code actions
 
 ### graphql-cli
 Command-line tool for validation and CI/CD integration.
@@ -95,18 +102,21 @@ cargo run -p graphql-lsp
 ✅ **Completed:**
 - Cargo workspace structure
 - graphql-config implementation (parsing, loading, validation)
-- Skeleton implementations for all crates
-
-🚧 **In Progress:**
-- Core validation engine
+- Core validation engine with project-wide diagnostics
 - Document loading and indexing
 - TypeScript/JavaScript extraction
+- LSP features: validation, go-to-definition, hover
+- Schema and document indexing
+
+🚧 **In Progress:**
+- VS Code extension improvements
+- Additional LSP features (completions, find references)
 
 📋 **Planned:**
-- LSP features (completions, hover, go-to-def)
 - Breaking change detection
-- VS Code extension
+- Code actions and refactoring
 - Remote schema introspection
+- Document symbols and outline
 
 ## Configuration Example
 

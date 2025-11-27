@@ -272,6 +272,159 @@ impl SchemaIndex {
             file_path,
         })
     }
+
+    /// Find the location of an argument definition in a field
+    #[must_use]
+    pub fn find_argument_definition(
+        &self,
+        type_name: &str,
+        field_name: &str,
+        argument_name: &str,
+    ) -> Option<ArgumentDefinitionLocation> {
+        use apollo_compiler::schema::ExtendedType;
+
+        let extended_type = self.schema.types.get(type_name)?;
+
+        let fields = match extended_type {
+            ExtendedType::Object(obj) => &obj.fields,
+            ExtendedType::Interface(iface) => &iface.fields,
+            _ => return None,
+        };
+
+        let field_component = fields.get(field_name)?;
+        let field_def = &field_component.node;
+
+        let arg = field_def
+            .arguments
+            .iter()
+            .find(|a| a.name.as_str() == argument_name)?;
+
+        let line_col_range = arg.name.line_column_range(&self.schema.sources)?;
+        let location = arg.name.location()?;
+        let file_id = location.file_id();
+        let file_path = self
+            .schema
+            .sources
+            .get(&file_id)?
+            .path()
+            .to_string_lossy()
+            .to_string();
+
+        let result_line = line_col_range.start.line.saturating_sub(1);
+        let result_col = line_col_range.start.column.saturating_sub(1);
+
+        Some(ArgumentDefinitionLocation {
+            line: result_line,
+            column: result_col,
+            argument_name: argument_name.to_string(),
+            file_path,
+        })
+    }
+
+    /// Find the location of an enum value definition
+    #[must_use]
+    pub fn find_enum_value_definition(
+        &self,
+        enum_type: &str,
+        enum_value: &str,
+    ) -> Option<EnumValueDefinitionLocation> {
+        use apollo_compiler::schema::ExtendedType;
+
+        let extended_type = self.schema.types.get(enum_type)?;
+
+        let ExtendedType::Enum(enum_def) = extended_type else {
+            return None;
+        };
+
+        let value = enum_def.values.get(enum_value)?;
+
+        let line_col_range = value.value.line_column_range(&self.schema.sources)?;
+        let location = value.value.location()?;
+        let file_id = location.file_id();
+        let file_path = self
+            .schema
+            .sources
+            .get(&file_id)?
+            .path()
+            .to_string_lossy()
+            .to_string();
+
+        let result_line = line_col_range.start.line.saturating_sub(1);
+        let result_col = line_col_range.start.column.saturating_sub(1);
+
+        Some(EnumValueDefinitionLocation {
+            line: result_line,
+            column: result_col,
+            enum_value: enum_value.to_string(),
+            file_path,
+        })
+    }
+
+    /// Find the location of a directive definition
+    #[must_use]
+    pub fn find_directive_definition(
+        &self,
+        directive_name: &str,
+    ) -> Option<DirectiveDefinitionLocation> {
+        let directive = self.schema.directive_definitions.get(directive_name)?;
+
+        let line_col_range = directive.name.line_column_range(&self.schema.sources)?;
+        let location = directive.name.location()?;
+        let file_id = location.file_id();
+        let file_path = self
+            .schema
+            .sources
+            .get(&file_id)?
+            .path()
+            .to_string_lossy()
+            .to_string();
+
+        let result_line = line_col_range.start.line.saturating_sub(1);
+        let result_col = line_col_range.start.column.saturating_sub(1);
+
+        Some(DirectiveDefinitionLocation {
+            line: result_line,
+            column: result_col,
+            directive_name: directive_name.to_string(),
+            file_path,
+        })
+    }
+
+    /// Find the location of a directive argument definition
+    #[must_use]
+    pub fn find_directive_argument_definition(
+        &self,
+        directive_name: &str,
+        argument_name: &str,
+    ) -> Option<DirectiveArgumentDefinitionLocation> {
+        let directive = self.schema.directive_definitions.get(directive_name)?;
+
+        let arg = directive
+            .arguments
+            .iter()
+            .find(|a| a.name.as_str() == argument_name)?;
+
+        let line_col_range = arg.name.line_column_range(&self.schema.sources)?;
+        let location = arg.name.location()?;
+        let file_id = location.file_id();
+        let file_path = self
+            .schema
+            .sources
+            .get(&file_id)?
+            .path()
+            .to_string_lossy()
+            .to_string();
+
+        let result_line = line_col_range.start.line.saturating_sub(1);
+        let result_col = line_col_range.start.column.saturating_sub(1);
+
+        Some(DirectiveArgumentDefinitionLocation {
+            line: result_line,
+            column: result_col,
+            argument_name: argument_name.to_string(),
+            file_path,
+        })
+    }
 }
 
 /// Location information for a field definition in schema
@@ -289,6 +442,42 @@ pub struct TypeDefinitionLocation {
     pub line: usize,
     pub column: usize,
     pub type_name: String,
+    pub file_path: String,
+}
+
+/// Location information for an argument definition in schema
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ArgumentDefinitionLocation {
+    pub line: usize,
+    pub column: usize,
+    pub argument_name: String,
+    pub file_path: String,
+}
+
+/// Location information for an enum value definition in schema
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EnumValueDefinitionLocation {
+    pub line: usize,
+    pub column: usize,
+    pub enum_value: String,
+    pub file_path: String,
+}
+
+/// Location information for a directive definition in schema
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectiveDefinitionLocation {
+    pub line: usize,
+    pub column: usize,
+    pub directive_name: String,
+    pub file_path: String,
+}
+
+/// Location information for a directive argument definition in schema
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DirectiveArgumentDefinitionLocation {
+    pub line: usize,
+    pub column: usize,
+    pub argument_name: String,
     pub file_path: String,
 }
 
