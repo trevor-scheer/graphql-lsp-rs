@@ -365,8 +365,29 @@ impl CompletionProvider {
         }
 
         // If we reach here, we're at the top level of the selection set (not inside any field).
-        // Filter out already-selected fields to prevent duplicates.
-        // The user can still type an alias if they want to select the same field multiple times.
+        // Check if there's an incomplete field with an alias right before the cursor position.
+        // This handles the case where user typed "alias: " and the cursor is after the space,
+        // but the parser's field node doesn't extend past the colon.
+        for selection in selection_set.selections() {
+            if let cst::Selection::Field(field) = selection {
+                // Check if this field has an alias but no name (incomplete after alias)
+                if field.alias().is_some() && field.name().is_none() {
+                    let field_range = field.syntax().text_range();
+                    // Check if cursor is right after this field (within a few characters)
+                    let field_end: usize = field_range.end().into();
+                    if byte_offset >= field_end && byte_offset <= field_end + 10 {
+                        // We're likely completing right after an incomplete alias
+                        return Some(CompletionContext::FieldSelection {
+                            parent_type: parent_type.to_string(),
+                            already_selected_fields: Vec::new(),
+                            is_in_alias: true,
+                        });
+                    }
+                }
+            }
+        }
+
+        // Otherwise, filter out already-selected fields to prevent duplicates.
         Some(CompletionContext::FieldSelection {
             parent_type: parent_type.to_string(),
             already_selected_fields,
