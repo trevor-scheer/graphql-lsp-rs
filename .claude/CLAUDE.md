@@ -81,3 +81,4 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - Don't add needless comments in source code; code should describe itself. Use comments to call out things that are subtle, confusing, or surprising.
 - After finishing making changes, make sure the debug binary is built and the editor extensions are rebuilt if necessary to enable human testing.
 - Put user reported bugs in .claude/notes/BUGS.md
+- When starting work in a new git worktree, copy over the .claude/ directory from the main worktree to include notes and local settings.
