@@ -296,14 +296,9 @@ impl CompletionProvider {
                     );
 
                     if in_this_field {
-                        if let Some(alias) = field.alias() {
-                            let alias_range = alias.syntax().text_range();
-                            is_in_alias = Self::range_contains(
-                                alias_range.start().into(),
-                                alias_range.end().into(),
-                                byte_offset,
-                            );
-                        }
+                        // If the field has an alias, we're completing an aliased field
+                        // so we should allow duplicate field selections
+                        is_in_alias = field.alias().is_some();
 
                         if let Some(context) = Self::check_field_for_context(
                             &field,
