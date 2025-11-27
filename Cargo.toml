@@ -21,7 +21,7 @@ authors = ["Trevor"]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_yaml = "0.9"
-thiserror = "1.0"
+thiserror = "2.0"
 anyhow = "1.0"
 
 # GraphQL
@@ -29,26 +29,26 @@ apollo-parser = "0.8"
 apollo-compiler = { git = "https://github.com/trevor-scheer/apollo-rs.git", branch = "parse_with_offset" }
 
 # Async
-tokio = { version = "1.0", features = ["full"] }
+tokio = { version = "1.48", features = ["full"] }
 
 # LSP
 tower-lsp-server = "0.22"
 lsp-types = "0.97"
 
 # CLI
-clap = { version = "4.0", features = ["derive"] }
+clap = { version = "4.5", features = ["derive"] }
 
 # File system
 glob = "0.3"
-walkdir = "2.0"
-notify = "6.0"
+walkdir = "2.5"
+notify = "8.2"
 
 # HTTP
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.12", features = ["json"] }
 
-swc_core = { version = "48.0", features = ["ecma_parser", "ecma_ast", "ecma_visit"] }
-swc_common = "17.0"
+swc_core = { version = "49.0", features = ["ecma_parser", "ecma_ast", "ecma_visit"] }
+swc_common = "18.0"
 
 # Utilities
-dashmap = "5.0"
-once_cell = "1.0"
+dashmap = "6.1"
+once_cell = "1.21"
