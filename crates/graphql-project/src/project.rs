@@ -265,25 +265,25 @@ impl GraphQLProject {
         // Add the current document
         Parser::new().parse_into_executable_builder(source, file_name, &mut builder);
 
-        // Only add project fragments if this document contains operations AND uses fragment spreads
+        // Only add referenced fragments (and their dependencies) if this document uses fragment spreads
         if !is_fragment_only && source.contains("...") {
-            let document_index = self.document_index.read().unwrap();
-            for frag_infos in document_index.fragments.values() {
-                // Process all fragments with this name (in case of duplicates)
-                for frag_info in frag_infos {
-                    if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+            // Find all fragment names referenced in this document (recursively)
+            let referenced_fragments = Self::collect_referenced_fragments(source, self);
+
+            // Add each referenced fragment individually
+            for fragment_name in referenced_fragments {
+                if let Some(frag_info) = self.get_fragment(&fragment_name) {
+                    // Extract just this specific fragment from the file
+                    if let Some(fragment_source) = Self::extract_fragment_from_file(
                         std::path::Path::new(&frag_info.file_path),
-                        &graphql_extract::ExtractConfig::default(),
+                        &fragment_name,
                     ) {
-                        for frag_item in frag_extracted {
-                            if frag_item.source.trim_start().starts_with("fragment") {
-                                Parser::new().parse_into_executable_builder(
-                                    &frag_item.source,
-                                    &frag_info.file_path,
-                                    &mut builder,
-                                );
-                            }
-                        }
+                        // Add this specific fragment to the builder
+                        Parser::new().parse_into_executable_builder(
+                            &fragment_source,
+                            &frag_info.file_path,
+                            &mut builder,
+                        );
                     }
                 }
             }
@@ -385,34 +385,32 @@ impl GraphQLProject {
                 .source_offset(offset)
                 .parse_into_executable_builder(source, file_path, &mut builder);
 
-            // Only add fragments if this document contains operations AND uses fragment spreads
+            // Only add referenced fragments (and their dependencies) if this document uses fragment spreads
             if !is_fragment_only && source.contains("...") {
-                // Add fragments from OTHER files (not current file)
-                // Fragments in the current file will be validated separately
-                let document_index = self.document_index.read().unwrap();
+                // Find all fragment names referenced in this document (recursively)
+                let referenced_fragments = Self::collect_referenced_fragments(source, self);
                 let current_path = std::path::Path::new(file_path);
 
-                for frag_infos in document_index.fragments.values() {
-                    // Process all fragments with this name (in case of duplicates)
-                    for frag_info in frag_infos {
+                // Add only the referenced fragments from OTHER files
+                // Fragments in the current file are already in the builder
+                for fragment_name in referenced_fragments {
+                    if let Some(frag_info) = self.get_fragment(&fragment_name) {
                         // Skip fragments from the current file
                         if std::path::Path::new(&frag_info.file_path) == current_path {
                             continue;
                         }
 
-                        if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+                        // Extract just this specific fragment from the file
+                        if let Some(fragment_source) = Self::extract_fragment_from_file(
                             std::path::Path::new(&frag_info.file_path),
-                            &graphql_extract::ExtractConfig::default(),
+                            &fragment_name,
                         ) {
-                            for frag_item in frag_extracted {
-                                if frag_item.source.trim_start().starts_with("fragment") {
-                                    Parser::new().parse_into_executable_builder(
-                                        &frag_item.source,
-                                        &frag_info.file_path,
-                                        &mut builder,
-                                    );
-                                }
-                            }
+                            // Add this specific fragment to the builder
+                            Parser::new().parse_into_executable_builder(
+                                &fragment_source,
+                                &frag_info.file_path,
+                                &mut builder,
+                            );
                         }
                     }
                 }
@@ -603,6 +601,131 @@ impl GraphQLProject {
                 }
             }
         }
+    }
+
+    /// Collect all fragment names referenced in a document (recursively)
+    ///
+    /// This finds all fragment spreads in the document, then recursively finds
+    /// fragments that those fragments depend on, building a complete set of all
+    /// fragments needed to validate this document.
+    fn collect_referenced_fragments(
+        source: &str,
+        project: &Self,
+    ) -> std::collections::HashSet<String> {
+        use apollo_parser::{cst, Parser};
+        use std::collections::{HashSet, VecDeque};
+
+        let mut referenced = HashSet::new();
+        let mut to_process = VecDeque::new();
+
+        // First, find all fragment spreads directly in this document
+        let parser = Parser::new(source);
+        let tree = parser.parse();
+
+        for definition in tree.document().definitions() {
+            if let cst::Definition::OperationDefinition(operation) = definition {
+                if let Some(selection_set) = operation.selection_set() {
+                    let mut direct_fragments = HashSet::new();
+                    Self::collect_fragment_spreads_from_selection_set(
+                        &selection_set,
+                        &mut direct_fragments,
+                    );
+                    for frag_name in direct_fragments {
+                        if !referenced.contains(&frag_name) {
+                            referenced.insert(frag_name.clone());
+                            to_process.push_back(frag_name);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Now recursively process fragment dependencies
+        while let Some(fragment_name) = to_process.pop_front() {
+            // Get the fragment definition and scan it for more fragment spreads
+            if let Some(frag_info) = project.get_fragment(&fragment_name) {
+                if let Ok(frag_extracted) = graphql_extract::extract_from_file(
+                    std::path::Path::new(&frag_info.file_path),
+                    &graphql_extract::ExtractConfig::default(),
+                ) {
+                    for frag_item in frag_extracted {
+                        let frag_parser = Parser::new(&frag_item.source);
+                        let frag_tree = frag_parser.parse();
+
+                        for definition in frag_tree.document().definitions() {
+                            if let cst::Definition::FragmentDefinition(fragment) = definition {
+                                if let Some(selection_set) = fragment.selection_set() {
+                                    let mut nested_fragments = HashSet::new();
+                                    Self::collect_fragment_spreads_from_selection_set(
+                                        &selection_set,
+                                        &mut nested_fragments,
+                                    );
+                                    for nested_frag_name in nested_fragments {
+                                        if !referenced.contains(&nested_frag_name) {
+                                            referenced.insert(nested_frag_name.clone());
+                                            to_process.push_back(nested_frag_name);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        referenced
+    }
+
+    /// Get a fragment by name from the document index
+    fn get_fragment(&self, name: &str) -> Option<crate::FragmentInfo> {
+        let document_index = self.document_index.read().unwrap();
+        document_index
+            .fragments
+            .get(name)
+            .and_then(|infos| infos.first().cloned())
+    }
+
+    /// Extract a specific fragment definition from a file
+    ///
+    /// This parses the file and extracts only the named fragment, rather than
+    /// including all fragments in the file. Returns None if the fragment isn't found.
+    fn extract_fragment_from_file(
+        file_path: &std::path::Path,
+        fragment_name: &str,
+    ) -> Option<String> {
+        use apollo_parser::{cst::CstNode, Parser};
+
+        // Extract GraphQL from the file
+        let extracted = graphql_extract::extract_from_file(
+            file_path,
+            &graphql_extract::ExtractConfig::default(),
+        )
+        .ok()?;
+
+        // Parse each extracted block looking for the fragment
+        for item in extracted {
+            let parser = Parser::new(&item.source);
+            let tree = parser.parse();
+
+            for definition in tree.document().definitions() {
+                if let apollo_parser::cst::Definition::FragmentDefinition(fragment) = definition {
+                    if let Some(frag_name_node) = fragment.fragment_name() {
+                        if let Some(name_node) = frag_name_node.name() {
+                            if name_node.text() == fragment_name {
+                                // Found the fragment - extract its text from the source
+                                let syntax_node = fragment.syntax();
+                                let start: usize = syntax_node.text_range().start().into();
+                                let end: usize = syntax_node.text_range().end().into();
+                                return Some(item.source[start..end].to_string());
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        None
     }
 
     /// Convert apollo-compiler diagnostics to our diagnostic format
