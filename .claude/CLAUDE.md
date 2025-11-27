@@ -37,6 +37,16 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - Use `cargo test` to run all tests
 - Use `cargo insta` for snapshot testing (if applicable)
 
+## Documentation
+
+- README.md files should be kept up to date
+- Before starting a new task, read the relevant README.md files for context
+- Add a README.md to each crate / major directory. README.md files should:
+  - Explain the purpose of the crate/directory
+  - Describe how it fits into the overall project
+  - Provide instructions and examples for using the code within
+  - Explain technical details that would help a new contributor understand the code
+
 ## Important LSP Features
 
 - **Goto Definition**: Navigate from fragment spreads to their definitions across files
