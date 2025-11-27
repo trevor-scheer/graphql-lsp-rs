@@ -25,6 +25,11 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - Ensure `cargo test` passes
 - Pre-commit hooks are set up via cargo-husky
 
+## PR Guidelines
+
+- Don't include notes about testing or linting passing in PR descriptions
+- Don't use excessive emoji in PR titles or descriptions
+
 ## Testing
 
 - Unit tests are located alongside source files

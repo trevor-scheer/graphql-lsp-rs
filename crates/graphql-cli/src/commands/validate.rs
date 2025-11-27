@@ -75,17 +75,7 @@ pub async fn run(
         match project.load_schema().await {
             Ok(()) => {
                 if matches!(format, OutputFormat::Human) {
-                    let schema = project.get_schema();
-                    if let Some(ref schema_str) = schema {
-                        let line_count = schema_str.lines().count();
-                        println!(
-                            "{} ({} lines)",
-                            "✓ Schema loaded successfully".green(),
-                            line_count
-                        );
-                    } else {
-                        println!("{}", "✓ Schema loaded successfully".green());
-                    }
+                    println!("{}", "✓ Schema loaded successfully".green());
                 }
             }
             Err(e) => {

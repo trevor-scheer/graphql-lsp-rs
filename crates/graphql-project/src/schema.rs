@@ -109,16 +109,6 @@ impl SchemaLoader {
         Ok(schema_files)
     }
 
-    /// Load schema from local file(s), supporting glob patterns
-    #[allow(dead_code)]
-    fn load_local(&self, pattern: &str) -> Result<Vec<String>> {
-        Ok(self
-            .load_local_with_paths(pattern)?
-            .into_iter()
-            .map(|(_, content)| content)
-            .collect())
-    }
-
     /// Load schema from remote endpoint via introspection
     #[allow(clippy::unused_async)] // Will be async when implemented
     async fn load_remote(&self, url: &str) -> Result<String> {

@@ -10,7 +10,6 @@ use std::sync::{Arc, RwLock};
 pub struct GraphQLProject {
     config: ProjectConfig,
     base_dir: Option<std::path::PathBuf>,
-    schema: Arc<RwLock<Option<String>>>,
     schema_index: Arc<RwLock<SchemaIndex>>,
     document_index: Arc<RwLock<DocumentIndex>>,
 }
@@ -22,7 +21,6 @@ impl GraphQLProject {
         Self {
             config,
             base_dir: None,
-            schema: Arc::new(RwLock::new(None)),
             schema_index: Arc::new(RwLock::new(SchemaIndex::new())),
             document_index: Arc::new(RwLock::new(DocumentIndex::new())),
         }
@@ -68,21 +66,9 @@ impl GraphQLProject {
         let schema_files = loader.load_with_paths().await?;
 
         // Build index from schema files (preserves source locations per file)
-        let index = SchemaIndex::from_schema_files(schema_files.clone());
-
-        // Also keep the joined content for backwards compatibility
-        let schema_content = schema_files
-            .iter()
-            .map(|(_, content)| content.as_str())
-            .collect::<Vec<_>>()
-            .join("\n\n");
+        let index = SchemaIndex::from_schema_files(schema_files);
 
         // Update state
-        {
-            let mut schema = self.schema.write().unwrap();
-            *schema = Some(schema_content);
-        }
-
         {
             let mut schema_index = self.schema_index.write().unwrap();
             *schema_index = index;
@@ -148,12 +134,6 @@ impl GraphQLProject {
     #[must_use]
     pub fn get_schema_index(&self) -> SchemaIndex {
         self.schema_index.read().unwrap().clone()
-    }
-
-    /// Get schema as string
-    #[must_use]
-    pub fn get_schema(&self) -> Option<String> {
-        self.schema.read().unwrap().clone()
     }
 
     /// Get document index
@@ -605,8 +585,8 @@ mod tests {
             extensions: None,
         };
 
-        let project = GraphQLProject::new(config);
-        assert!(project.get_schema().is_none());
+        let _project = GraphQLProject::new(config);
+        // Project created successfully with empty schema index
     }
 
     #[test]
