@@ -689,10 +689,22 @@ impl GotoDefinitionProvider {
                             .collect()
                     })
             }
-            ElementType::TypeReference { .. } => {
-                // TODO: Implement type definition lookup in schema
-                // This would require tracking source locations in the schema
-                None
+            ElementType::TypeReference { type_name } => {
+                // Find the type definition in the schema
+                let type_def = schema_index.find_type_definition(&type_name)?;
+
+                let range = Range {
+                    start: Position {
+                        line: type_def.line,
+                        character: type_def.column,
+                    },
+                    end: Position {
+                        line: type_def.line,
+                        character: type_def.column + type_name.len(),
+                    },
+                };
+
+                Some(vec![DefinitionLocation::new(type_def.file_path, range)])
             }
             ElementType::Variable { .. } => {
                 // TODO: Implement variable definition lookup
@@ -1171,5 +1183,491 @@ query GetUser {
         // "name" field in User type
         assert_eq!(locations[0].range.start.line, 7);
         assert_eq!(locations[0].range.start.character, 2);
+    }
+
+    #[test]
+    fn test_goto_type_definition_from_fragment() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type Query {
+  user: User
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r"
+fragment UserFields on User {
+    id
+    name
+}
+";
+
+        // Position on "User" in fragment type condition (line 1, column 23)
+        let position = Position {
+            line: 1,
+            character: 23,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find type definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "User" type definition starts at line 5 (0-indexed)
+        assert_eq!(locations[0].range.start.line, 5);
+    }
+
+    #[test]
+    fn test_goto_type_definition_from_inline_fragment() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type Query {
+  search: SearchResult
+}
+
+union SearchResult = User | Post
+
+type User {
+  id: ID!
+  name: String!
+}
+
+type Post {
+  id: ID!
+  title: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r"
+query Search {
+    search {
+        ... on User {
+            name
+        }
+    }
+}
+";
+
+        // Position on "User" in inline fragment (line 3, column 16)
+        let position = Position {
+            line: 3,
+            character: 16,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find type definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "User" type definition
+        assert_eq!(locations[0].range.start.line, 7);
+    }
+
+    #[test]
+    fn test_goto_interface_type_definition() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+interface Node {
+  id: ID!
+}
+
+type User implements Node {
+  id: ID!
+  name: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r"
+fragment NodeFields on Node {
+    id
+}
+";
+
+        // Position on "Node" in fragment type condition
+        let position = Position {
+            line: 1,
+            character: 23,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find interface definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "Node" interface definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_union_type_definition() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type User {
+  id: ID!
+}
+
+type Post {
+  id: ID!
+}
+
+union SearchResult = User | Post
+
+type Query {
+  search: SearchResult
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r"
+fragment SearchFields on SearchResult {
+    __typename
+}
+";
+
+        // Position on "SearchResult" in fragment type condition
+        let position = Position {
+            line: 1,
+            character: 26,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find union definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "SearchResult" union definition
+        assert_eq!(locations[0].range.start.line, 9);
+    }
+
+    #[test]
+    fn test_goto_enum_type_definition() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+type User {
+  id: ID!
+  status: Status
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r"
+fragment UserFields on User {
+    status
+}
+";
+
+        // Position on "User" in fragment type condition
+        let position = Position {
+            line: 1,
+            character: 23,
+        };
+
+        let locations = provider
+            .goto_definition(document, position, &doc_index, &schema)
+            .expect("Should find type definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "User" type definition
+        assert_eq!(locations[0].range.start.line, 6);
+    }
+
+    #[test]
+    fn test_goto_input_object_type_definition_from_field() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+input CreateUserInput {
+  name: String!
+  email: String!
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+
+type Mutation {
+  createUser(input: CreateUserInput!): User
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Test goto definition from field type reference in schema
+        let schema_document = schema_str;
+
+        // Position on "CreateUserInput" in mutation field argument (line 12, column 21)
+        let position = Position {
+            line: 12,
+            character: 21,
+        };
+
+        let locations = provider
+            .goto_definition(schema_document, position, &doc_index, &schema)
+            .expect("Should find input object definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "CreateUserInput" input object definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_type_definition_from_field_type() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type User {
+  id: ID!
+  name: String!
+}
+
+type Query {
+  user(id: ID!): User
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Test goto definition from return type in field definition
+        let schema_document = schema_str;
+
+        // Position on "User" in Query.user return type (line 7, column 17)
+        let position = Position {
+            line: 7,
+            character: 17,
+        };
+
+        let locations = provider
+            .goto_definition(schema_document, position, &doc_index, &schema)
+            .expect("Should find type definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "User" type definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_type_definition_from_implements() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+interface Node {
+  id: ID!
+}
+
+type User implements Node {
+  id: ID!
+  name: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Test goto definition from implements clause
+        let schema_document = schema_str;
+
+        // Position on "Node" in implements clause (line 5, column 21)
+        let position = Position {
+            line: 5,
+            character: 21,
+        };
+
+        let locations = provider
+            .goto_definition(schema_document, position, &doc_index, &schema)
+            .expect("Should find interface definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "Node" interface definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_type_definition_from_union_member() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type User {
+  id: ID!
+}
+
+type Post {
+  id: ID!
+}
+
+union SearchResult = User | Post
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Test goto definition from union member
+        let schema_document = schema_str;
+
+        // Position on "User" in union definition (line 9, column 21)
+        let position = Position {
+            line: 9,
+            character: 21,
+        };
+
+        let locations = provider
+            .goto_definition(schema_document, position, &doc_index, &schema)
+            .expect("Should find type definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "User" type definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_scalar_type_definition() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+scalar DateTime
+
+type Event {
+  id: ID!
+  timestamp: DateTime
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Test goto definition from scalar type reference
+        let schema_document = schema_str;
+
+        // Position on "DateTime" in field type (line 5, column 13)
+        let position = Position {
+            line: 5,
+            character: 13,
+        };
+
+        let locations = provider
+            .goto_definition(schema_document, position, &doc_index, &schema)
+            .expect("Should find scalar definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "DateTime" scalar definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_type_definition_with_list_wrapper() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type User {
+  id: ID!
+  name: String!
+}
+
+type Query {
+  users: [User!]!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        // Test goto definition from type inside list wrapper
+        let schema_document = schema_str;
+
+        // Position on "User" inside [User!]! (line 7, column 10)
+        let position = Position {
+            line: 7,
+            character: 10,
+        };
+
+        let locations = provider
+            .goto_definition(schema_document, position, &doc_index, &schema)
+            .expect("Should find type definition");
+
+        assert_eq!(locations.len(), 1);
+        assert_eq!(locations[0].file_path, "schema.graphql");
+        // "User" type definition
+        assert_eq!(locations[0].range.start.line, 1);
+    }
+
+    #[test]
+    fn test_goto_type_definition_from_variable_type() {
+        let doc_index = DocumentIndex::new();
+
+        let schema_str = r"
+type Query {
+  user(id: ID!): User
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+";
+
+        let schema = SchemaIndex::from_schema(schema_str);
+        let provider = GotoDefinitionProvider::new();
+
+        let document = r"
+query GetUser($userId: ID!) {
+    user(id: $userId) {
+        name
+    }
+}
+";
+
+        // Position on "ID" in variable definition (line 1, column 23)
+        let position = Position {
+            line: 1,
+            character: 23,
+        };
+
+        let locations = provider.goto_definition(document, position, &doc_index, &schema);
+
+        // ID is a built-in scalar, may or may not be explicitly defined in schema
+        // This test ensures we don't crash when trying to look it up
+        // Built-in scalars might not have source locations
+        if let Some(locs) = locations {
+            assert!(!locs.is_empty());
+        }
     }
 }

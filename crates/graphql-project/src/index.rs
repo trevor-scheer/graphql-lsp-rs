@@ -215,6 +215,73 @@ impl SchemaIndex {
             file_path,
         })
     }
+
+    /// Find the location of a type definition in the schema source
+    ///
+    /// Returns the line, column (0-indexed), and file path where the type is defined
+    /// in the schema source using apollo-compiler's built-in location tracking.
+    ///
+    /// Supports all GraphQL type kinds: Object, Interface, Union, Enum, Scalar, and `InputObject`.
+    #[must_use]
+    pub fn find_type_definition(&self, type_name: &str) -> Option<TypeDefinitionLocation> {
+        use apollo_compiler::schema::ExtendedType;
+
+        // Get the type from the schema
+        let extended_type = self.schema.types.get(type_name)?;
+
+        // ExtendedType variants are Node<T>, so we can call location() directly
+        let location = match extended_type {
+            ExtendedType::Object(obj) => obj.location(),
+            ExtendedType::Interface(iface) => iface.location(),
+            ExtendedType::Union(union) => union.location(),
+            ExtendedType::Enum(enum_def) => enum_def.location(),
+            ExtendedType::InputObject(input) => input.location(),
+            ExtendedType::Scalar(scalar) => scalar.location(),
+        }?;
+
+        // Get the line/column range
+        let line_col_range = match extended_type {
+            ExtendedType::Object(obj) => obj.line_column_range(&self.schema.sources),
+            ExtendedType::Interface(iface) => iface.line_column_range(&self.schema.sources),
+            ExtendedType::Union(union) => union.line_column_range(&self.schema.sources),
+            ExtendedType::Enum(enum_def) => enum_def.line_column_range(&self.schema.sources),
+            ExtendedType::InputObject(input) => input.line_column_range(&self.schema.sources),
+            ExtendedType::Scalar(scalar) => scalar.line_column_range(&self.schema.sources),
+        }?;
+
+        tracing::info!(
+            "Apollo compiler line_col_range for type {}: start.line={}, start.column={}",
+            type_name,
+            line_col_range.start.line,
+            line_col_range.start.column
+        );
+
+        // Get the file path from the source map
+        let file_id = location.file_id();
+        let file_path = self
+            .schema
+            .sources
+            .get(&file_id)?
+            .path()
+            .to_string_lossy()
+            .to_string();
+
+        let result_line = line_col_range.start.line.saturating_sub(1);
+        let result_col = line_col_range.start.column.saturating_sub(1);
+
+        tracing::info!(
+            "After converting to 0-indexed: line={}, col={}",
+            result_line,
+            result_col
+        );
+
+        Some(TypeDefinitionLocation {
+            line: result_line,  // Convert to 0-indexed
+            column: result_col, // Convert to 0-indexed
+            type_name: type_name.to_string(),
+            file_path,
+        })
+    }
 }
 
 /// Location information for a field definition in schema
@@ -223,6 +290,15 @@ pub struct FieldDefinitionLocation {
     pub line: usize,
     pub column: usize,
     pub field_name: String,
+    pub file_path: String,
+}
+
+/// Location information for a type definition in schema
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeDefinitionLocation {
+    pub line: usize,
+    pub column: usize,
+    pub type_name: String,
     pub file_path: String,
 }
 
