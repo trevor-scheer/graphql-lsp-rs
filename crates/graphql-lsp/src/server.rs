@@ -660,17 +660,24 @@ impl LanguageServer for GraphQLLanguageServer {
                     let lsp_locations: Vec<Location> = locations
                         .iter()
                         .filter_map(|loc| {
-                            // Resolve the file path relative to the workspace if it's not absolute
-                            let file_path = if std::path::Path::new(&loc.file_path).is_absolute() {
-                                std::path::PathBuf::from(&loc.file_path)
+                            // Check if the file_path is already a URI
+                            let file_uri = if loc.file_path.starts_with("file://") {
+                                // Already a URI, parse it directly
+                                loc.file_path.parse::<Uri>().ok()?
                             } else {
-                                // Resolve relative to workspace root
-                                let workspace_path: Uri = workspace_uri.parse().ok()?;
-                                let workspace_file_path = workspace_path.to_file_path()?;
-                                workspace_file_path.join(&loc.file_path)
+                                // Resolve the file path relative to the workspace if it's not absolute
+                                let file_path =
+                                    if std::path::Path::new(&loc.file_path).is_absolute() {
+                                        std::path::PathBuf::from(&loc.file_path)
+                                    } else {
+                                        // Resolve relative to workspace root
+                                        let workspace_path: Uri = workspace_uri.parse().ok()?;
+                                        let workspace_file_path = workspace_path.to_file_path()?;
+                                        workspace_file_path.join(&loc.file_path)
+                                    };
+                                Uri::from_file_path(file_path)?
                             };
 
-                            let file_uri = Uri::from_file_path(file_path)?;
                             Some(Location {
                                 uri: file_uri,
                                 range: Range {
@@ -733,19 +740,25 @@ impl LanguageServer for GraphQLLanguageServer {
         let lsp_locations: Vec<Location> = locations
             .iter()
             .filter_map(|loc| {
-                // Resolve the file path relative to the workspace if it's not absolute
-                let file_path = if std::path::Path::new(&loc.file_path).is_absolute() {
-                    std::path::PathBuf::from(&loc.file_path)
+                // Check if the file_path is already a URI
+                let file_uri = if loc.file_path.starts_with("file://") {
+                    // Already a URI, parse it directly
+                    loc.file_path.parse::<Uri>().ok()?
                 } else {
-                    // Resolve relative to workspace root
-                    let workspace_path: Uri = workspace_uri.parse().ok()?;
-                    let workspace_file_path = workspace_path.to_file_path()?;
-                    workspace_file_path.join(&loc.file_path)
+                    // Resolve the file path relative to the workspace if it's not absolute
+                    let file_path = if std::path::Path::new(&loc.file_path).is_absolute() {
+                        std::path::PathBuf::from(&loc.file_path)
+                    } else {
+                        // Resolve relative to workspace root
+                        let workspace_path: Uri = workspace_uri.parse().ok()?;
+                        let workspace_file_path = workspace_path.to_file_path()?;
+                        workspace_file_path.join(&loc.file_path)
+                    };
+
+                    tracing::info!("Resolved file path: {:?}", file_path);
+                    Uri::from_file_path(&file_path)?
                 };
 
-                tracing::info!("Resolved file path: {:?}", file_path);
-
-                let file_uri = Uri::from_file_path(&file_path)?;
                 tracing::info!("Created URI: {:?}", file_uri);
 
                 let lsp_loc = Location {
