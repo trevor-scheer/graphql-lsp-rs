@@ -63,22 +63,6 @@ The LSP server discovers GraphQL configuration files (`.graphqlrc`, `graphql.con
 - Find GraphQL documents
 - Configure validation rules
 
-## Dependencies
-
-- **graphql-project**: Core GraphQL project management, validation, and indexing
-- **graphql-config**: Configuration file parsing
-- **graphql-extract**: Extracting GraphQL from TypeScript/JavaScript files
-- **tower-lsp**: LSP protocol implementation
-- **apollo-compiler**: GraphQL parsing and validation
-
-## Testing
-
-Tests are located in the `tests/` directory and cover LSP functionality:
-
-```bash
-cargo test --package graphql-lsp
-```
-
 ## Development
 
 Key files to understand:
@@ -88,5 +72,4 @@ Key files to understand:
 When adding new LSP features:
 1. Add the handler method to `GraphQLLanguageServer` in server.rs
 2. Implement the feature using `graphql-project` APIs
-3. Add tests in the tests/ directory
-4. Update the VSCode extension if needed
+3. Update the VSCode extension if needed

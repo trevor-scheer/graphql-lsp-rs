@@ -191,21 +191,6 @@ This continuously validates as you edit GraphQL files.
 
 Uses the `colored` crate for colorized output and `indicatif` for progress bars.
 
-## Dependencies
-
-- **graphql-project**: Core GraphQL project management
-- **graphql-config**: Configuration file parsing
-- **graphql-extract**: Extracting GraphQL from TypeScript/JavaScript
-- **clap**: Command-line argument parsing
-- **colored**: Terminal colors
-- **indicatif**: Progress indicators
-
-## Testing
-
-```bash
-cargo test --package graphql-cli
-```
-
 ## Development
 
 Key files to understand:
@@ -216,5 +201,4 @@ When adding new commands:
 1. Add the command variant to the `Commands` enum in main.rs
 2. Create a new file in src/commands/
 3. Implement the command logic using `graphql-project` APIs
-4. Add tests
-5. Update this README with usage examples
+4. Update this README with usage examples

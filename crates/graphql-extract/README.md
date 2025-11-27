@@ -195,24 +195,6 @@ Detected from file extensions:
 - `.ts`, `.tsx` → TypeScript
 - `.js`, `.jsx` → JavaScript
 
-## Dependencies
-
-- **swc_core**: TypeScript/JavaScript parsing
-- **swc_common**: SWC common utilities
-- **thiserror**: Error handling
-- **glob**: File pattern matching
-- **walkdir**: Directory traversal
-
-## Testing
-
-Tests are in the `tests/` directory:
-
-```bash
-cargo test --package graphql-extract
-```
-
-Test files include various TypeScript/JavaScript patterns with embedded GraphQL.
-
 ## Development
 
 Key files to understand:
@@ -223,9 +205,8 @@ Key files to understand:
 
 When adding new features:
 1. Update the AST visitor in extractor.rs
-2. Add test cases with various code patterns
-3. Update ExtractConfig if adding new options
-4. Document supported patterns in this README
+2. Update ExtractConfig if adding new options
+3. Document supported patterns in this README
 
 ## Limitations
 

@@ -184,25 +184,6 @@ Provides detailed error messages for:
 - Invalid configuration structure
 - Missing required fields
 
-## Dependencies
-
-- **serde**: Serialization/deserialization
-- **serde_json**: JSON parsing
-- **serde_yaml**: YAML parsing
-- **glob**: Glob pattern matching
-- **walkdir**: Directory traversal
-- **thiserror**: Error handling
-
-## Testing
-
-Tests are located in the `tests/` directory:
-
-```bash
-cargo test --package graphql-config
-```
-
-Tests use temporary directories to simulate various configuration scenarios.
-
 ## Development
 
 Key files to understand:
@@ -213,5 +194,4 @@ Key files to understand:
 When adding new features:
 1. Update the configuration structs in config.rs
 2. Add parsing logic in loader.rs
-3. Add tests with example configurations
-4. Update this README with examples
+3. Update this README with examples

@@ -127,29 +127,6 @@ Uses DashMap for concurrent access to project data, allowing:
 - Multiple LSP requests to be handled in parallel
 - Safe updates from file watchers
 
-## Dependencies
-
-- **graphql-config**: Configuration file parsing
-- **graphql-extract**: Extracting GraphQL from TypeScript/JavaScript
-- **apollo-compiler**: GraphQL parsing, validation, and schema building
-- **tokio**: Async runtime
-- **dashmap**: Concurrent hash maps
-
-## Testing
-
-Tests are in the `tests/` directory:
-
-```bash
-cargo test --package graphql-project
-```
-
-Snapshot tests use `insta`:
-
-```bash
-cargo insta test --package graphql-project
-cargo insta review  # Review snapshot changes
-```
-
 ## Development
 
 Key files to understand:
@@ -163,5 +140,4 @@ When adding new features:
 1. Consider if it needs indexing (add to `DocumentIndex` or `SchemaIndex`)
 2. Implement the feature on `GraphQLProject`
 3. Export public APIs in lib.rs
-4. Add tests
-5. Update LSP server to expose the feature
+4. Update LSP server to expose the feature
