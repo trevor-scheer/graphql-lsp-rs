@@ -166,6 +166,84 @@ impl FindReferencesProvider {
                         }
                     }
                 }
+                cst::Definition::ObjectTypeDefinition(obj) => {
+                    if let Some(name) = obj.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::TypeDefinition {
+                                type_name: name.text().to_string(),
+                            });
+                        }
+                    }
+                }
+                cst::Definition::InterfaceTypeDefinition(iface) => {
+                    if let Some(name) = iface.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::TypeDefinition {
+                                type_name: name.text().to_string(),
+                            });
+                        }
+                    }
+                }
+                cst::Definition::UnionTypeDefinition(union) => {
+                    if let Some(name) = union.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::TypeDefinition {
+                                type_name: name.text().to_string(),
+                            });
+                        }
+                    }
+                }
+                cst::Definition::ScalarTypeDefinition(scalar) => {
+                    if let Some(name) = scalar.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::TypeDefinition {
+                                type_name: name.text().to_string(),
+                            });
+                        }
+                    }
+                }
+                cst::Definition::EnumTypeDefinition(enum_def) => {
+                    if let Some(name) = enum_def.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::TypeDefinition {
+                                type_name: name.text().to_string(),
+                            });
+                        }
+                    }
+                }
+                cst::Definition::InputObjectTypeDefinition(input) => {
+                    if let Some(name) = input.name() {
+                        let range = name.syntax().text_range();
+                        let start: usize = range.start().into();
+                        let end: usize = range.end().into();
+
+                        if byte_offset >= start && byte_offset < end {
+                            return Some(ElementType::TypeDefinition {
+                                type_name: name.text().to_string(),
+                            });
+                        }
+                    }
+                }
                 _ => {}
             }
         }
@@ -254,6 +332,10 @@ impl FindReferencesProvider {
             ElementType::FragmentSpread { fragment_name } => {
                 // When on a spread, find all spreads (same as definition)
                 Self::find_fragment_spread_references(fragment_name, all_documents)
+            }
+            ElementType::TypeDefinition { type_name } => {
+                // Find all type references
+                Self::find_type_references(type_name, all_documents, include_declaration)
             }
         }
     }
@@ -373,6 +455,460 @@ impl FindReferencesProvider {
             }
         }
     }
+
+    /// Find all type references in all documents
+    fn find_type_references(
+        type_name: &str,
+        all_documents: &[(String, String)],
+        include_declaration: bool,
+    ) -> Option<Vec<ReferenceLocation>> {
+        let mut references = Vec::new();
+
+        for (file_path, source) in all_documents {
+            let parser = Parser::new(source);
+            let tree = parser.parse();
+
+            if tree.errors().count() > 0 {
+                continue;
+            }
+
+            let doc = tree.document();
+            Self::collect_type_references(
+                &doc,
+                type_name,
+                file_path,
+                source,
+                &mut references,
+                include_declaration,
+            );
+        }
+
+        if references.is_empty() {
+            None
+        } else {
+            Some(references)
+        }
+    }
+
+    /// Collect all type references in a document
+    fn collect_type_references(
+        doc: &cst::Document,
+        target_type: &str,
+        file_path: &str,
+        source: &str,
+        references: &mut Vec<ReferenceLocation>,
+        include_declaration: bool,
+    ) {
+        for definition in doc.definitions() {
+            match definition {
+                cst::Definition::ObjectTypeDefinition(obj) => {
+                    // Check if this is the type definition itself
+                    if let Some(name) = obj.name() {
+                        if name.text() == target_type && include_declaration {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                    Self::collect_type_references_from_object_type(
+                        &obj,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+                cst::Definition::InterfaceTypeDefinition(iface) => {
+                    if let Some(name) = iface.name() {
+                        if name.text() == target_type && include_declaration {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                    Self::collect_type_references_from_interface_type(
+                        &iface,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+                cst::Definition::UnionTypeDefinition(union) => {
+                    if let Some(name) = union.name() {
+                        if name.text() == target_type && include_declaration {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                    Self::collect_type_references_from_union_type(
+                        &union,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+                cst::Definition::InputObjectTypeDefinition(input) => {
+                    if let Some(name) = input.name() {
+                        if name.text() == target_type && include_declaration {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                    Self::collect_type_references_from_input_object_type(
+                        &input,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+                cst::Definition::ScalarTypeDefinition(scalar) => {
+                    if let Some(name) = scalar.name() {
+                        if name.text() == target_type && include_declaration {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                    // Scalars don't have fields, so no need to check for references within
+                }
+                cst::Definition::EnumTypeDefinition(enum_def) => {
+                    if let Some(name) = enum_def.name() {
+                        if name.text() == target_type && include_declaration {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                    // Enums don't have field types, so no need to check for references within
+                }
+                _ => {}
+            }
+        }
+    }
+
+    /// Collect type references from an object type definition
+    fn collect_type_references_from_object_type(
+        obj: &cst::ObjectTypeDefinition,
+        target_type: &str,
+        file_path: &str,
+        source: &str,
+        references: &mut Vec<ReferenceLocation>,
+    ) {
+        // Check field types
+        if let Some(fields) = obj.fields_definition() {
+            for field in fields.field_definitions() {
+                if let Some(ty) = field.ty() {
+                    Self::collect_type_references_from_type(
+                        &ty,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+                // Check argument types
+                if let Some(args) = field.arguments_definition() {
+                    for arg in args.input_value_definitions() {
+                        if let Some(ty) = arg.ty() {
+                            Self::collect_type_references_from_type(
+                                &ty,
+                                target_type,
+                                file_path,
+                                source,
+                                references,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check implements interfaces
+        if let Some(implements) = obj.implements_interfaces() {
+            for named_type in implements.named_types() {
+                if let Some(name) = named_type.name() {
+                    if name.text() == target_type {
+                        let range = name.syntax().text_range();
+                        let (line, column) = Self::offset_to_position(source, range.start().into());
+                        let range = Range {
+                            start: Position {
+                                line,
+                                character: column,
+                            },
+                            end: Position {
+                                line,
+                                character: column + target_type.len(),
+                            },
+                        };
+                        references.push(ReferenceLocation::new(file_path.to_string(), range));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Collect type references from an interface type definition
+    fn collect_type_references_from_interface_type(
+        iface: &cst::InterfaceTypeDefinition,
+        target_type: &str,
+        file_path: &str,
+        source: &str,
+        references: &mut Vec<ReferenceLocation>,
+    ) {
+        // Check field types
+        if let Some(fields) = iface.fields_definition() {
+            for field in fields.field_definitions() {
+                if let Some(ty) = field.ty() {
+                    Self::collect_type_references_from_type(
+                        &ty,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+                // Check argument types
+                if let Some(args) = field.arguments_definition() {
+                    for arg in args.input_value_definitions() {
+                        if let Some(ty) = arg.ty() {
+                            Self::collect_type_references_from_type(
+                                &ty,
+                                target_type,
+                                file_path,
+                                source,
+                                references,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check implements interfaces
+        if let Some(implements) = iface.implements_interfaces() {
+            for named_type in implements.named_types() {
+                if let Some(name) = named_type.name() {
+                    if name.text() == target_type {
+                        let range = name.syntax().text_range();
+                        let (line, column) = Self::offset_to_position(source, range.start().into());
+                        let range = Range {
+                            start: Position {
+                                line,
+                                character: column,
+                            },
+                            end: Position {
+                                line,
+                                character: column + target_type.len(),
+                            },
+                        };
+                        references.push(ReferenceLocation::new(file_path.to_string(), range));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Collect type references from a union type definition
+    fn collect_type_references_from_union_type(
+        union: &cst::UnionTypeDefinition,
+        target_type: &str,
+        file_path: &str,
+        source: &str,
+        references: &mut Vec<ReferenceLocation>,
+    ) {
+        // Check union members
+        if let Some(members) = union.union_member_types() {
+            for named_type in members.named_types() {
+                if let Some(name) = named_type.name() {
+                    if name.text() == target_type {
+                        let range = name.syntax().text_range();
+                        let (line, column) = Self::offset_to_position(source, range.start().into());
+                        let range = Range {
+                            start: Position {
+                                line,
+                                character: column,
+                            },
+                            end: Position {
+                                line,
+                                character: column + target_type.len(),
+                            },
+                        };
+                        references.push(ReferenceLocation::new(file_path.to_string(), range));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Collect type references from an input object type definition
+    fn collect_type_references_from_input_object_type(
+        input: &cst::InputObjectTypeDefinition,
+        target_type: &str,
+        file_path: &str,
+        source: &str,
+        references: &mut Vec<ReferenceLocation>,
+    ) {
+        // Check input field types
+        if let Some(fields) = input.input_fields_definition() {
+            for field in fields.input_value_definitions() {
+                if let Some(ty) = field.ty() {
+                    Self::collect_type_references_from_type(
+                        &ty,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+            }
+        }
+    }
+
+    /// Collect type references from a Type node (handles List and `NonNull` wrappers)
+    fn collect_type_references_from_type(
+        ty: &cst::Type,
+        target_type: &str,
+        file_path: &str,
+        source: &str,
+        references: &mut Vec<ReferenceLocation>,
+    ) {
+        match ty {
+            cst::Type::NamedType(named) => {
+                if let Some(name) = named.name() {
+                    if name.text() == target_type {
+                        let range = name.syntax().text_range();
+                        let (line, column) = Self::offset_to_position(source, range.start().into());
+                        let range = Range {
+                            start: Position {
+                                line,
+                                character: column,
+                            },
+                            end: Position {
+                                line,
+                                character: column + target_type.len(),
+                            },
+                        };
+                        references.push(ReferenceLocation::new(file_path.to_string(), range));
+                    }
+                }
+            }
+            cst::Type::ListType(list) => {
+                if let Some(inner_ty) = list.ty() {
+                    Self::collect_type_references_from_type(
+                        &inner_ty,
+                        target_type,
+                        file_path,
+                        source,
+                        references,
+                    );
+                }
+            }
+            cst::Type::NonNullType(non_null) => {
+                // NonNullType can wrap either a NamedType or a ListType
+                if let Some(named) = non_null.named_type() {
+                    if let Some(name) = named.name() {
+                        if name.text() == target_type {
+                            let range = name.syntax().text_range();
+                            let (line, column) =
+                                Self::offset_to_position(source, range.start().into());
+                            let range = Range {
+                                start: Position {
+                                    line,
+                                    character: column,
+                                },
+                                end: Position {
+                                    line,
+                                    character: column + target_type.len(),
+                                },
+                            };
+                            references.push(ReferenceLocation::new(file_path.to_string(), range));
+                        }
+                    }
+                } else if let Some(list) = non_null.list_type() {
+                    if let Some(inner_ty) = list.ty() {
+                        Self::collect_type_references_from_type(
+                            &inner_ty,
+                            target_type,
+                            file_path,
+                            source,
+                            references,
+                        );
+                    }
+                }
+            }
+        }
+    }
 }
 
 impl Default for FindReferencesProvider {
@@ -385,6 +921,7 @@ impl Default for FindReferencesProvider {
 enum ElementType {
     FragmentSpread { fragment_name: String },
     FragmentDefinition { fragment_name: String },
+    TypeDefinition { type_name: String },
 }
 
 #[cfg(test)]
