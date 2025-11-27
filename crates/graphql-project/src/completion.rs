@@ -283,7 +283,6 @@ impl CompletionProvider {
         }
 
         let mut already_selected_fields = Vec::new();
-        let mut is_in_alias = false;
 
         for selection in selection_set.selections() {
             match selection {
@@ -296,9 +295,14 @@ impl CompletionProvider {
                     );
 
                     if in_this_field {
-                        // If the field has an alias, we're completing an aliased field
-                        // so we should allow duplicate field selections
-                        is_in_alias = field.alias().is_some();
+                        // We're inside a field, check if it's incomplete (being typed)
+                        // If the field has an alias OR has no name yet, allow all fields
+                        let has_alias = field.alias().is_some();
+                        let has_name = field.name().is_some();
+
+                        // If field has no name yet, user might be typing an alias or field name
+                        // In either case, don't filter
+                        let should_filter = !has_alias && has_name;
 
                         if let Some(context) = Self::check_field_for_context(
                             &field,
@@ -309,12 +313,23 @@ impl CompletionProvider {
                         ) {
                             return Some(context);
                         }
-                    } else {
-                        // Only add to already_selected_fields if we're NOT in this field
-                        // (we don't want to filter out the field we're currently completing)
-                        if let Some(name) = field.name() {
-                            already_selected_fields.push(name.text().to_string());
-                        }
+
+                        // If we're here, we're in a field but check_field_for_context returned None
+                        // This means we're at the field name position itself
+                        return Some(CompletionContext::FieldSelection {
+                            parent_type: parent_type.to_string(),
+                            already_selected_fields: if should_filter {
+                                already_selected_fields
+                            } else {
+                                Vec::new()
+                            },
+                            is_in_alias: has_alias,
+                        });
+                    }
+
+                    // Only add to already_selected_fields if we're NOT in this field
+                    if let Some(name) = field.name() {
+                        already_selected_fields.push(name.text().to_string());
                     }
                 }
                 cst::Selection::FragmentSpread(spread) => {
@@ -341,10 +356,13 @@ impl CompletionProvider {
             }
         }
 
+        // If we reach here, we're not inside any specific field, so we're completing
+        // at the top level of the selection set. In this case, don't filter anything
+        // because the user might be about to type an alias.
         Some(CompletionContext::FieldSelection {
             parent_type: parent_type.to_string(),
-            already_selected_fields,
-            is_in_alias,
+            already_selected_fields: Vec::new(),
+            is_in_alias: false,
         })
     }
 
