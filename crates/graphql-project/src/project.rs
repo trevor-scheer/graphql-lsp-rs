@@ -1,6 +1,7 @@
 use crate::{
-    DefinitionLocation, Diagnostic, DocumentIndex, DocumentLoader, GotoDefinitionProvider,
-    HoverInfo, HoverProvider, Position, Result, SchemaIndex, SchemaLoader, Validator,
+    CompletionItem, CompletionProvider, DefinitionLocation, Diagnostic, DocumentIndex,
+    DocumentLoader, GotoDefinitionProvider, HoverInfo, HoverProvider, Position, Result,
+    SchemaIndex, SchemaLoader, Validator,
 };
 use apollo_compiler::validation::DiagnosticList;
 use graphql_config::{GraphQLConfig, ProjectConfig};
@@ -487,6 +488,15 @@ impl GraphQLProject {
         let schema_index = self.schema_index.read().unwrap();
         let hover_provider = HoverProvider::new();
         hover_provider.hover(source, position, &schema_index)
+    }
+
+    /// Get completion items for a position in a GraphQL document
+    #[must_use]
+    pub fn complete(&self, source: &str, position: Position) -> Option<Vec<CompletionItem>> {
+        let document_index = self.document_index.read().unwrap();
+        let schema_index = self.schema_index.read().unwrap();
+        let completion_provider = CompletionProvider::new();
+        completion_provider.complete(source, position, &document_index, &schema_index)
     }
 
     /// Get definition locations for a position in a GraphQL document

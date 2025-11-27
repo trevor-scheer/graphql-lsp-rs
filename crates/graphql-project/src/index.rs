@@ -425,6 +425,83 @@ impl SchemaIndex {
             file_path,
         })
     }
+
+    /// Get all types in the schema
+    #[must_use]
+    pub fn all_types(&self) -> Vec<TypeInfo> {
+        self.schema
+            .types
+            .iter()
+            .map(|(_, ext_type)| TypeInfo::from_extended_type(ext_type))
+            .collect()
+    }
+
+    /// Get all directives in the schema
+    #[must_use]
+    pub fn all_directives(&self) -> Vec<DirectiveInfo> {
+        self.schema
+            .directive_definitions
+            .iter()
+            .map(|(_, directive)| DirectiveInfo {
+                name: directive.name.to_string(),
+                description: directive
+                    .description
+                    .as_ref()
+                    .map(std::string::ToString::to_string),
+                locations: directive
+                    .locations
+                    .iter()
+                    .map(|loc| format!("{loc:?}"))
+                    .collect(),
+            })
+            .collect()
+    }
+
+    /// Get enum values for a specific enum type
+    #[must_use]
+    pub fn get_enum_values(&self, enum_name: &str) -> Vec<EnumValueInfo> {
+        use apollo_compiler::schema::ExtendedType;
+
+        let Some(ext_type) = self.schema.types.get(enum_name) else {
+            return Vec::new();
+        };
+
+        let ExtendedType::Enum(enum_def) = ext_type else {
+            return Vec::new();
+        };
+
+        enum_def
+            .values
+            .iter()
+            .map(|(_, value)| {
+                let deprecated = value.directives.get("deprecated").and_then(|directive| {
+                    directive
+                        .arguments
+                        .iter()
+                        .find(|arg| arg.name.as_str() == "reason")
+                        .and_then(|arg| {
+                            if let apollo_compiler::ast::Value::String(reason_str) =
+                                arg.value.as_ref()
+                            {
+                                Some(reason_str.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .or_else(|| Some("No longer supported".to_string()))
+                });
+
+                EnumValueInfo {
+                    name: value.value.to_string(),
+                    description: value
+                        .description
+                        .as_ref()
+                        .map(std::string::ToString::to_string),
+                    deprecated,
+                }
+            })
+            .collect()
+    }
 }
 
 /// Location information for a field definition in schema
@@ -627,6 +704,14 @@ pub struct DirectiveInfo {
     pub name: String,
     pub description: Option<String>,
     pub locations: Vec<String>,
+}
+
+/// Enum value information extracted from schema
+#[derive(Debug, Clone)]
+pub struct EnumValueInfo {
+    pub name: String,
+    pub description: Option<String>,
+    pub deprecated: Option<String>,
 }
 
 /// Index of GraphQL documents (operations and fragments)

@@ -481,12 +481,90 @@ impl LanguageServer for GraphQLLanguageServer {
     }
 
     async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
-        tracing::debug!(
-            "Completion requested: {:?}",
-            params.text_document_position.text_document.uri
-        );
-        // TODO: Implement autocompletion
-        Ok(None)
+        let uri = params.text_document_position.text_document.uri;
+        let lsp_position = params.text_document_position.position;
+
+        tracing::debug!("Completion requested: {:?} at {:?}", uri, lsp_position);
+
+        let Some(content) = self.document_cache.get(&uri.to_string()) else {
+            tracing::warn!("No cached content for document: {:?}", uri);
+            return Ok(None);
+        };
+
+        let Some((workspace_uri, project_idx)) = self.find_workspace_and_project(&uri) else {
+            tracing::warn!("No project found for document: {:?}", uri);
+            return Ok(None);
+        };
+
+        let Some(projects) = self.projects.get(&workspace_uri) else {
+            tracing::warn!("No projects loaded for workspace: {workspace_uri}");
+            return Ok(None);
+        };
+
+        let Some((_, project)) = projects.get(project_idx) else {
+            tracing::warn!("Project index {project_idx} not found in workspace {workspace_uri}");
+            return Ok(None);
+        };
+
+        let position = graphql_project::Position {
+            line: lsp_position.line as usize,
+            character: lsp_position.character as usize,
+        };
+
+        let Some(items) = project.complete(&content, position) else {
+            return Ok(None);
+        };
+
+        let lsp_items: Vec<lsp_types::CompletionItem> = items
+            .into_iter()
+            .map(|item| {
+                let kind = match item.kind {
+                    graphql_project::CompletionItemKind::Field => {
+                        Some(lsp_types::CompletionItemKind::FIELD)
+                    }
+                    graphql_project::CompletionItemKind::Type => {
+                        Some(lsp_types::CompletionItemKind::CLASS)
+                    }
+                    graphql_project::CompletionItemKind::Fragment => {
+                        Some(lsp_types::CompletionItemKind::SNIPPET)
+                    }
+                    graphql_project::CompletionItemKind::Operation => {
+                        Some(lsp_types::CompletionItemKind::FUNCTION)
+                    }
+                    graphql_project::CompletionItemKind::Directive => {
+                        Some(lsp_types::CompletionItemKind::KEYWORD)
+                    }
+                    graphql_project::CompletionItemKind::EnumValue => {
+                        Some(lsp_types::CompletionItemKind::ENUM_MEMBER)
+                    }
+                    graphql_project::CompletionItemKind::Argument => {
+                        Some(lsp_types::CompletionItemKind::PROPERTY)
+                    }
+                    graphql_project::CompletionItemKind::Variable => {
+                        Some(lsp_types::CompletionItemKind::VARIABLE)
+                    }
+                };
+
+                let documentation = item.documentation.map(|doc| {
+                    lsp_types::Documentation::MarkupContent(lsp_types::MarkupContent {
+                        kind: lsp_types::MarkupKind::Markdown,
+                        value: doc,
+                    })
+                });
+
+                lsp_types::CompletionItem {
+                    label: item.label,
+                    kind,
+                    detail: item.detail,
+                    documentation,
+                    deprecated: Some(item.deprecated),
+                    insert_text: item.insert_text,
+                    ..Default::default()
+                }
+            })
+            .collect();
+
+        Ok(Some(CompletionResponse::Array(lsp_items)))
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
