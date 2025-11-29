@@ -77,15 +77,17 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
+    "lint": "oxlint src",
     "package": "vsce package"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
+    "@types/node": "^24.10.1",
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.2.1",
+    "oxlint": "^1.30.0",
     "typescript": "^5.0.0"
   }
 }
