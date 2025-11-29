@@ -166,6 +166,65 @@ impl GraphQLLanguageServer {
         None
     }
 
+    /// Re-validate all open documents in all workspaces
+    /// This is called after schema changes to update validation errors
+    async fn revalidate_all_documents(&self) {
+        let start = std::time::Instant::now();
+        tracing::info!("Starting re-validation of all open documents after schema change");
+
+        // Collect all URIs and their content from the document cache
+        let documents: Vec<(String, String)> = self
+            .document_cache
+            .iter()
+            .map(|entry| {
+                let uri_str = entry.key().clone();
+                let content = entry.value().clone();
+                (uri_str, content)
+            })
+            .collect();
+
+        tracing::info!("Re-validating {} open documents", documents.len());
+
+        // Validate each document (skip schema files to avoid recursion)
+        for (uri_str, content) in documents {
+            // Parse the URI string - these are already valid URIs from the LSP
+            if let Ok(uri) = serde_json::from_str::<Uri>(&format!("\"{uri_str}\"")) {
+                // Skip schema files - they don't need revalidation after schema changes
+                if let Some(path) = uri.to_file_path() {
+                    // Check if this is a schema file by checking against all projects
+                    let mut is_schema = false;
+                    for workspace_projects in self.projects.iter() {
+                        for (_, project) in workspace_projects.value() {
+                            if project.is_schema_file(&path) {
+                                is_schema = true;
+                                break;
+                            }
+                        }
+                        if is_schema {
+                            break;
+                        }
+                    }
+
+                    if is_schema {
+                        tracing::debug!("Skipping schema file: {:?}", uri);
+                        continue;
+                    }
+                }
+
+                tracing::debug!("Re-validating document: {:?}", uri);
+                // Don't trigger another revalidate_all_documents during batch revalidation
+                self.validate_document_impl(uri, &content, false).await;
+            } else {
+                tracing::warn!("Failed to parse URI: {}", uri_str);
+            }
+        }
+
+        tracing::info!(
+            "Completed re-validation of all documents in {:?}",
+            start.elapsed()
+        );
+    }
+
     /// Re-validate all fragment definition files in the project
     /// This is called after document changes to update unused fragment warnings
     async fn revalidate_fragment_files(&self, changed_uri: &Uri) {
@@ -263,6 +322,12 @@ impl GraphQLLanguageServer {
     #[allow(clippy::too_many_lines)]
     #[tracing::instrument(skip(self, content), fields(uri = ?uri))]
     async fn validate_document(&self, uri: Uri, content: &str) {
+        self.validate_document_impl(uri, content, true).await;
+    }
+
+    /// Internal implementation of `validate_document` with control over revalidation
+    #[allow(clippy::too_many_lines)]
+    async fn validate_document_impl(&self, uri: Uri, content: &str, should_revalidate_all: bool) {
         let start = std::time::Instant::now();
         tracing::debug!("Validating document");
 
@@ -289,14 +354,43 @@ impl GraphQLLanguageServer {
                 return;
             };
 
-            // Check if this is a schema file - schema files shouldn't be validated as executable documents
-            if let Some(ref path) = file_path {
-                if project.is_schema_file(path.as_ref()) {
-                    tracing::debug!("Skipping validation for schema file");
-                    // Clear any existing diagnostics
-                    self.client.publish_diagnostics(uri, vec![], None).await;
+            // Check if this is a schema file - schema files need special handling
+            let is_schema_file = file_path
+                .as_ref()
+                .is_some_and(|path| project.is_schema_file(path.as_ref()));
+
+            if is_schema_file {
+                tracing::info!("Schema file changed, reloading schema");
+
+                // Update the schema index with the new content
+                let file_path_str = file_path.as_ref().unwrap().display().to_string();
+                if let Err(e) = project.update_schema_index(&file_path_str, content).await {
+                    tracing::error!("Failed to update schema: {}", e);
+                    // Drop the lock before async call
+                    drop(projects);
+                    self.client
+                        .log_message(MessageType::ERROR, format!("Failed to update schema: {e}"))
+                        .await;
                     return;
                 }
+
+                tracing::info!("Schema reloaded successfully");
+                // Drop the mutable lock BEFORE calling revalidate_all_documents
+                // to avoid deadlock when it tries to acquire a read lock on projects
+                drop(projects);
+
+                // Clear diagnostics for the schema file itself
+                self.client
+                    .publish_diagnostics(uri.clone(), vec![], None)
+                    .await;
+
+                // After schema changes, we need to revalidate all open documents
+                // because field types, deprecations, etc. may have changed
+                // Only do this if we're not already in a batch revalidation
+                if should_revalidate_all {
+                    Box::pin(self.revalidate_all_documents()).await;
+                }
+                return;
             }
 
             // Update the document index for this specific file with in-memory content

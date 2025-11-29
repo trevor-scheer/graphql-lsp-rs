@@ -100,6 +100,64 @@ impl GraphQLProject {
         Ok(())
     }
 
+    /// Update schema index with in-memory content for a specific schema file
+    ///
+    /// This reloads the entire schema from disk, replacing the specified file's content
+    /// with the provided in-memory content. This is used by the LSP to keep the schema
+    /// up-to-date with editor changes without needing to save to disk.
+    ///
+    /// Note: Unlike document updates, we reload the entire schema because:
+    /// 1. Schema files change less frequently than operation files
+    /// 2. Schema relationships (extends, implements) require full rebuild
+    /// 3. The performance impact is acceptable for typical schema sizes
+    pub async fn update_schema_index(&self, file_path: &str, content: &str) -> Result<()> {
+        let loader = SchemaLoader::new(self.config.schema.clone());
+
+        // Set base path if we have one
+        let loader = if let Some(ref base_dir) = self.base_dir {
+            loader.with_base_path(base_dir)
+        } else {
+            loader
+        };
+
+        let mut schema_files = loader.load_with_paths().await?;
+
+        // Replace the content of the specified file with in-memory content
+        let mut found = false;
+        for (path, file_content) in &mut schema_files {
+            // Normalize paths for comparison (handle both absolute and canonical paths)
+            let normalized_path = std::path::Path::new(path.as_str())
+                .canonicalize()
+                .unwrap_or_else(|_| std::path::PathBuf::from(path.as_str()));
+            let normalized_file_path = std::path::Path::new(file_path)
+                .canonicalize()
+                .unwrap_or_else(|_| std::path::PathBuf::from(file_path));
+
+            if normalized_path == normalized_file_path {
+                *file_content = content.to_string();
+                found = true;
+                break;
+            }
+        }
+
+        // If the file wasn't found in the schema files, add it
+        // (This can happen if the file matches the schema pattern but wasn't loaded yet)
+        if !found {
+            schema_files.push((file_path.to_string(), content.to_string()));
+        }
+
+        // Rebuild the schema index with updated content
+        let index = SchemaIndex::from_schema_files(schema_files);
+
+        // Update state
+        {
+            let mut schema_index = self.schema_index.write().unwrap();
+            *schema_index = index;
+        }
+
+        Ok(())
+    }
+
     /// Load documents from configured sources
     pub fn load_documents(&self) -> Result<()> {
         // Return early if no documents configured
