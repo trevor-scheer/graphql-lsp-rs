@@ -398,6 +398,10 @@ impl GraphQLLanguageServer {
             diagnostic_count = diagnostics.len(),
             "Validated document"
         );
+
+        // Refresh diagnostics for any other files affected by duplicate name changes
+        self.refresh_affected_files_diagnostics(&workspace_uri, project_idx, &uri)
+            .await;
     }
 
     /// Get project-wide duplicate name diagnostics for a specific file
@@ -428,6 +432,124 @@ impl GraphQLLanguageServer {
             .filter(|(path, _)| path == file_path)
             .map(|(_, diag)| self.convert_project_diagnostic(diag))
             .collect()
+    }
+
+    /// Refresh diagnostics for all files affected by duplicate name changes
+    ///
+    /// When a file is edited and introduces or removes duplicate names, other files
+    /// that share those names need to have their diagnostics refreshed to show or
+    /// clear duplicate name errors.
+    async fn refresh_affected_files_diagnostics(
+        &self,
+        workspace_uri: &str,
+        project_idx: usize,
+        changed_file_uri: &Uri,
+    ) {
+        use graphql_project::LintSeverity;
+        use std::collections::HashSet;
+
+        // Get the project and check if unique_names lint is enabled
+        let Some(projects) = self.projects.get(workspace_uri) else {
+            return;
+        };
+
+        let Some((_, project)) = projects.get(project_idx) else {
+            return;
+        };
+
+        let lint_config = project.get_lint_config();
+        let severity = match lint_config.get_severity("unique_names") {
+            Some(LintSeverity::Error) => graphql_project::Severity::Error,
+            Some(LintSeverity::Warn) => graphql_project::Severity::Warning,
+            Some(LintSeverity::Off) | None => return,
+        };
+
+        // Get all duplicate name diagnostics
+        let document_index = project.get_document_index();
+        let duplicate_diagnostics = document_index.check_duplicate_names(severity);
+
+        // Extract unique file paths that have duplicate name diagnostics
+        let affected_files: HashSet<String> = duplicate_diagnostics
+            .iter()
+            .map(|(path, _)| path.clone())
+            .collect();
+
+        let changed_file_path = changed_file_uri.to_file_path();
+
+        // For each affected file (excluding the one we just validated), refresh diagnostics
+        for file_path in affected_files {
+            // Skip the file we just validated
+            if let Some(ref changed_path) = changed_file_path {
+                if file_path == changed_path.display().to_string() {
+                    continue;
+                }
+            }
+
+            // Try to convert the file path to a URI
+            let Some(file_uri) = Uri::from_file_path(&file_path) else {
+                tracing::warn!("Failed to convert file path to URI: {}", file_path);
+                continue;
+            };
+
+            // Get the document content from cache, or read from disk
+            let content = if let Some(cached) = self.document_cache.get(file_uri.as_str()) {
+                cached.clone()
+            } else {
+                // File not in cache, try to read from disk
+                match std::fs::read_to_string(&file_path) {
+                    Ok(content) => content,
+                    Err(e) => {
+                        tracing::warn!("Failed to read file {}: {}", file_path, e);
+                        continue;
+                    }
+                }
+            };
+
+            // Check if this is a TypeScript/JavaScript file
+            let is_ts_js = std::path::Path::new(&file_path)
+                .extension()
+                .and_then(|ext| ext.to_str())
+                .is_some_and(|ext| matches!(ext, "ts" | "tsx" | "js" | "jsx"));
+
+            // Get document-specific diagnostics (type errors, etc.)
+            let mut diagnostics = if is_ts_js {
+                self.validate_typescript_document(&file_uri, &content, project)
+            } else {
+                self.validate_graphql_document(&content, project)
+            };
+
+            // Add project-wide duplicate name diagnostics for this file
+            let project_wide_diags = self.get_project_wide_diagnostics(&file_path, project);
+            diagnostics.extend(project_wide_diags);
+
+            // Filter out diagnostics with invalid ranges
+            let line_count = content.lines().count();
+            diagnostics.retain(|diag| {
+                let start_line = diag.range.start.line as usize;
+                let end_line = diag.range.end.line as usize;
+
+                if start_line >= line_count || end_line >= line_count {
+                    tracing::warn!(
+                        "Filtered out diagnostic with invalid range: {:?} (document has {} lines)",
+                        diag.range,
+                        line_count
+                    );
+                    false
+                } else {
+                    true
+                }
+            });
+
+            // Publish diagnostics for the affected file
+            tracing::debug!(
+                "Refreshing diagnostics for affected file: {} ({} diagnostics)",
+                file_path,
+                diagnostics.len()
+            );
+            self.client
+                .publish_diagnostics(file_uri, diagnostics, None)
+                .await;
+        }
     }
 
     /// Validate a pure GraphQL document
