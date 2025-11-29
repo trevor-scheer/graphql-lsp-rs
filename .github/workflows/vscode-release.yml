@@ -3,15 +3,15 @@ name: VSCode Extension Release
 permissions:
   contents: write
 
-# This workflow runs when you push a git tag that looks like a version
-# Mirrors the release workflow but specifically for VSCode extension packaging
+# This workflow runs when you push a git tag for VSCode extension releases
+# Use tags like vscode-v0.1.1 to trigger this workflow
 on:
   pull_request:
     paths:
       - '.github/workflows/vscode-release.yml'
   push:
     tags:
-      - '**[0-9]+.[0-9]+.[0-9]+*'
+      - 'vscode-v*'
 
 jobs:
   # Check if we should run (only on actual tags, not PRs)
