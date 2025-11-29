@@ -80,23 +80,23 @@ Command-line tool for validation and CI/CD integration.
 
 **macOS and Linux:**
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor-scheer/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
+irm https://github.com/trevor-scheer/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
 ```
 
 #### Install from Source
 
 ```bash
-cargo install --git https://github.com/trevor/graphql-lsp graphql-cli
+cargo install --git https://github.com/trevor-scheer/graphql-lsp graphql-cli
 ```
 
 #### Download Binary Directly
 
-Download the appropriate binary for your platform from the [releases page](https://github.com/trevor/graphql-lsp/releases):
+Download the appropriate binary for your platform from the [releases page](https://github.com/trevor-scheer/graphql-lsp/releases):
 - macOS (Intel): `graphql-cli-x86_64-apple-darwin.tar.xz`
 - macOS (Apple Silicon): `graphql-cli-aarch64-apple-darwin.tar.xz`
 - Linux (x86_64): `graphql-cli-x86_64-unknown-linux-gnu.tar.xz`

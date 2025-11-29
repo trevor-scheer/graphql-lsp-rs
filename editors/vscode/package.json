@@ -3,7 +3,7 @@
   "displayName": "GraphQL LSP",
   "description": "GraphQL Language Server with validation, completion, and go-to-definition",
   "version": "0.1.1",
-  "publisher": "trevor",
+  "publisher": "Trevor Scheer <trevor.scheer@gmail.com>",
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -62,6 +62,11 @@
           ],
           "default": "off",
           "description": "Traces the communication between VS Code and the language server."
+        },
+        "graphql-lsp.serverPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the graphql-lsp server executable. If empty, the extension will search for it in PATH or download it automatically."
         }
       }
     }
