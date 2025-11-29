@@ -1,6 +1,5 @@
 console.log(">>> GraphQL LSP extension module loading <<<");
 
-import * as path from "path";
 import { workspace, ExtensionContext, window, OutputChannel } from "vscode";
 import {
   LanguageClient,
@@ -8,77 +7,80 @@ import {
   ServerOptions,
   Executable,
 } from "vscode-languageclient/node";
+import { findServerBinary } from "./binaryManager";
 
 console.log(">>> GraphQL LSP extension imports complete <<<");
 
 let client: LanguageClient;
 let outputChannel: OutputChannel;
 
-export function activate(context: ExtensionContext) {
+export async function activate(context: ExtensionContext) {
   outputChannel = window.createOutputChannel("GraphQL LSP Debug");
-  outputChannel.show(true); // true = preserve focus
+  outputChannel.show(true);
   outputChannel.appendLine("=== GraphQL LSP extension activating ===");
 
-  // Path to the LSP server binary
-  // In development, resolve relative to the extension directory
-  const serverCommand =
-    process.env.GRAPHQL_LSP_PATH ||
-    path.join(context.extensionPath, "../../target/debug/graphql-lsp");
-  outputChannel.appendLine(`LSP server command: ${serverCommand}`);
-  console.log(`LSP server command: ${serverCommand}`);
+  try {
+    const config = workspace.getConfiguration("graphql-lsp");
+    const customPath = config.get<string>("serverPath");
 
-  const run: Executable = {
-    command: serverCommand,
-    options: {
-      env: {
-        ...process.env,
-        RUST_LOG: process.env.RUST_LOG || "debug",
+    const serverCommand = await findServerBinary(
+      context,
+      outputChannel,
+      customPath
+    );
+    outputChannel.appendLine(`Using LSP server at: ${serverCommand}`);
+
+    const run: Executable = {
+      command: serverCommand,
+      options: {
+        env: {
+          ...process.env,
+          RUST_LOG: process.env.RUST_LOG || "debug",
+        },
       },
-    },
-  };
+    };
 
-  const serverOptions: ServerOptions = {
-    run,
-    debug: run,
-  };
+    const serverOptions: ServerOptions = {
+      run,
+      debug: run,
+    };
 
-  const clientOptions: LanguageClientOptions = {
-    documentSelector: [
-      { scheme: "file", language: "graphql" },
-      { scheme: "file", pattern: "**/*.{graphql,gql}" },
-      { scheme: "file", language: "typescript" },
-      { scheme: "file", language: "typescriptreact" },
-      { scheme: "file", language: "javascript" },
-      { scheme: "file", language: "javascriptreact" },
-    ],
-    synchronize: {
-      fileEvents: workspace.createFileSystemWatcher(
-        "**/*.{graphql,gql,ts,tsx,js,jsx}"
-      ),
-    },
-    outputChannel: outputChannel,
-  };
+    const clientOptions: LanguageClientOptions = {
+      documentSelector: [
+        { scheme: "file", language: "graphql" },
+        { scheme: "file", pattern: "**/*.{graphql,gql}" },
+        { scheme: "file", language: "typescript" },
+        { scheme: "file", language: "typescriptreact" },
+        { scheme: "file", language: "javascript" },
+        { scheme: "file", language: "javascriptreact" },
+      ],
+      synchronize: {
+        fileEvents: workspace.createFileSystemWatcher(
+          "**/*.{graphql,gql,ts,tsx,js,jsx}"
+        ),
+      },
+      outputChannel: outputChannel,
+    };
 
-  outputChannel.appendLine("Creating language client...");
+    outputChannel.appendLine("Creating language client...");
 
-  client = new LanguageClient(
-    "graphql-lsp",
-    "GraphQL Language Server",
-    serverOptions,
-    clientOptions
-  );
+    client = new LanguageClient(
+      "graphql-lsp",
+      "GraphQL Language Server",
+      serverOptions,
+      clientOptions
+    );
 
-  outputChannel.appendLine("Starting language client...");
+    outputChannel.appendLine("Starting language client...");
 
-  client.start().then(
-    () => {
-      outputChannel.appendLine("Language client started successfully!");
-    },
-    (error) => {
-      outputChannel.appendLine(`Failed to start language client: ${error}`);
-      window.showErrorMessage(`GraphQL LSP failed to start: ${error}`);
-    }
-  );
+    await client.start();
+    outputChannel.appendLine("Language client started successfully!");
+  } catch (error) {
+    const errorMessage = `Failed to start GraphQL LSP: ${error}`;
+    outputChannel.appendLine(errorMessage);
+    window.showErrorMessage(errorMessage);
+    throw error;
+  }
 
   outputChannel.appendLine("Extension activated!");
   console.log("=== Extension activation complete ===");

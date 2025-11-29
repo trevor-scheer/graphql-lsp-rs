@@ -80,23 +80,23 @@ Command-line tool for validation and CI/CD integration.
 
 **macOS and Linux:**
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor-scheer/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
 ```
 
 **Windows (PowerShell):**
 ```powershell
-irm https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
+irm https://github.com/trevor-scheer/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
 ```
 
 #### Install from Source
 
 ```bash
-cargo install --git https://github.com/trevor/graphql-lsp graphql-cli
+cargo install --git https://github.com/trevor-scheer/graphql-lsp graphql-cli
 ```
 
 #### Download Binary Directly
 
-Download the appropriate binary for your platform from the [releases page](https://github.com/trevor/graphql-lsp/releases):
+Download the appropriate binary for your platform from the [releases page](https://github.com/trevor-scheer/graphql-lsp/releases):
 - macOS (Intel): `graphql-cli-x86_64-apple-darwin.tar.xz`
 - macOS (Apple Silicon): `graphql-cli-aarch64-apple-darwin.tar.xz`
 - Linux (x86_64): `graphql-cli-x86_64-unknown-linux-gnu.tar.xz`
@@ -105,13 +105,32 @@ Download the appropriate binary for your platform from the [releases page](https
 
 ### LSP Server
 
-The LSP server must be built from source:
+The VSCode extension will automatically download and install the LSP server binary on first use. However, you can also install it manually:
 
+#### Automatic Installation (Recommended)
+
+Simply install the VSCode extension - it will download the appropriate binary for your platform automatically.
+
+#### Manual Installation
+
+**Via cargo:**
 ```bash
-cargo build -p graphql-lsp --release
+cargo install graphql-lsp
 ```
 
-The VSCode extension will automatically use the binary at `target/release/graphql-lsp` relative to the workspace root, or you can set the `GRAPHQL_LSP_PATH` environment variable to specify a custom location.
+**From releases:**
+Download the appropriate binary from the [releases page](https://github.com/trevor-scheer/graphql-lsp/releases):
+- macOS (Intel): `graphql-lsp-x86_64-apple-darwin.tar.xz`
+- macOS (Apple Silicon): `graphql-lsp-aarch64-apple-darwin.tar.xz`
+- Linux (x86_64): `graphql-lsp-x86_64-unknown-linux-gnu.tar.xz`
+- Linux (ARM64): `graphql-lsp-aarch64-unknown-linux-gnu.tar.xz`
+- Windows: `graphql-lsp-x86_64-pc-windows-msvc.zip`
+
+**Custom binary path:**
+Set the `graphql-lsp.serverPath` setting in VSCode to point to a custom binary location.
+
+**For development:**
+The extension will automatically use `target/debug/graphql-lsp` when running from the repository, or you can set the `GRAPHQL_LSP_PATH` environment variable.
 
 ## Getting Started
 

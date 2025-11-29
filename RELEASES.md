@@ -86,22 +86,22 @@ Users can install the CLI in several ways:
 
 **macOS/Linux:**
 ```bash
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor-scheer/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
 ```
 
 **Windows:**
 ```powershell
-irm https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
+irm https://github.com/trevor-scheer/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
 ```
 
 ### 2. Direct Download
 
-Download the appropriate binary from the [releases page](https://github.com/trevor/graphql-lsp/releases).
+Download the appropriate binary from the [releases page](https://github.com/trevor-scheer/graphql-lsp/releases).
 
 ### 3. From Source
 
 ```bash
-cargo install --git https://github.com/trevor/graphql-lsp graphql-cli
+cargo install --git https://github.com/trevor-scheer/graphql-lsp graphql-cli
 ```
 
 ## Binary Optimization
