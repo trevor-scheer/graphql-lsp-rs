@@ -90,10 +90,44 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - `cargo clippy` - Lint checks
 - `cargo fmt` - Format code
 - `target/debug/graphql validate` - Run validation CLI
+- `RUST_LOG=debug target/debug/graphql-lsp` - Run LSP with debug logging
 - `cd editors/vscode && npm run format` - Format VSCode extension code
 - `cd editors/vscode && npm run format:check` - Check VSCode extension formatting
 - `cd editors/vscode && npm run lint` - Lint VSCode extension
 - `cd editors/vscode && npm run compile` - Build VSCode extension
+
+## Logging and Tracing Strategy
+
+### Framework
+- Uses `tracing` crate for structured logging and instrumentation
+- Uses `tracing-subscriber` with env-filter for log level control
+- Outputs to stderr (LSP protocol uses stdout for JSON-RPC)
+- ANSI colors disabled for LSP compatibility
+
+### Log Levels
+- **ERROR**: Critical failures (schema load errors, document processing failures)
+- **WARN**: Non-fatal issues (missing config, no project found, stale data)
+- **INFO**: High-level operations (server lifecycle, document operations, validation completion)
+- **DEBUG**: Detailed operations (cache hits, timing measurements, internal state)
+- **TRACE**: Reserved for deep debugging (not currently used)
+
+### Configuration
+- Set `RUST_LOG` environment variable to control log levels
+- Default: `info` if not specified
+- Examples:
+  - `RUST_LOG=debug` - Enable debug logging
+  - `RUST_LOG=graphql_lsp=debug,graphql_project=info` - Module-specific levels
+  - `RUST_LOG=off` - Disable logging
+
+### Guidelines
+- Log user-facing operations at INFO (document open/save, validation start/complete)
+- Log performance metrics with timing at DEBUG level
+- Include context in log messages (file paths, project names, positions)
+- Log errors immediately when they occur, before propagating
+- Use structured fields for searchable data: `tracing::info!(uri = ?doc_uri, "message")`
+- Keep log messages concise but informative
+- Avoid logging sensitive data (API keys, credentials)
+- Log at entry/exit of complex operations for traceability
 
 # Instructions for Claude
 

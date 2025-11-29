@@ -70,8 +70,9 @@ impl GotoDefinitionProvider {
         cached_ast: Option<&apollo_parser::SyntaxTree>,
     ) -> Option<Vec<DefinitionLocation>> {
         tracing::info!(
-            "GotoDefinitionProvider::goto_definition called with position: {:?}",
-            position
+            line = position.line,
+            character = position.character,
+            "goto_definition called"
         );
 
         let tree_holder;
@@ -84,28 +85,26 @@ impl GotoDefinitionProvider {
         };
 
         let error_count = tree.errors().count();
-        tracing::info!("Parser errors: {}", error_count);
         if error_count > 0 {
-            tracing::info!("Returning None due to parser errors");
+            tracing::debug!(error_count, "Parser errors, returning None");
             return None;
         }
 
         let doc = tree.document();
         let byte_offset = Self::position_to_offset(source, position);
-        tracing::info!("Byte offset: {:?}", byte_offset);
         if byte_offset.is_none() {
-            tracing::info!("Returning None - could not convert position to offset");
+            tracing::debug!("Could not convert position to offset");
             return None;
         }
         let byte_offset = byte_offset?;
 
         let element_type = Self::find_element_at_position(&doc, byte_offset, source, schema_index);
-        tracing::info!("Element type: {:?}", element_type);
         if element_type.is_none() {
-            tracing::info!("Returning None - no element found at position");
+            tracing::debug!("No element found at position");
             return None;
         }
         let element_type = element_type?;
+        tracing::debug!(element_type = ?element_type, "Found element");
 
         let result = Self::resolve_definition(
             element_type,
@@ -114,7 +113,13 @@ impl GotoDefinitionProvider {
             source,
             file_path,
         );
-        tracing::info!("resolve_definition returned: {:?}", result.is_some());
+
+        if let Some(locations) = &result {
+            tracing::info!(count = locations.len(), "Found definitions");
+        } else {
+            tracing::debug!("No definitions found");
+        }
+
         result
     }
 

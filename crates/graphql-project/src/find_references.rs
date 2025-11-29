@@ -78,8 +78,10 @@ impl FindReferencesProvider {
         document_asts: Option<&HashMap<String, SyntaxTree>>,
     ) -> Option<Vec<ReferenceLocation>> {
         tracing::info!(
-            "FindReferencesProvider::find_references called with position: {:?}",
-            position
+            line = position.line,
+            character = position.character,
+            include_declaration,
+            "find_references called"
         );
 
         let tree_holder;
@@ -91,8 +93,9 @@ impl FindReferencesProvider {
             &tree_holder
         };
 
-        if tree.errors().count() > 0 {
-            tracing::info!("Returning None due to parser errors");
+        let error_count = tree.errors().count();
+        if error_count > 0 {
+            tracing::debug!(error_count, "Parser errors, returning None");
             return None;
         }
 
@@ -100,7 +103,7 @@ impl FindReferencesProvider {
         let byte_offset = Self::position_to_offset(source, position)?;
         let element_type = Self::find_element_at_position(&doc, byte_offset, source, schema_index)?;
 
-        tracing::info!("Finding references for element: {:?}", element_type);
+        tracing::debug!(element_type = ?element_type, "Finding references for element");
 
         let references = Self::find_all_references_with_asts(
             &element_type,
@@ -111,6 +114,7 @@ impl FindReferencesProvider {
             document_asts,
         )?;
 
+        tracing::info!(count = references.len(), "Found references");
         Some(references)
     }
 

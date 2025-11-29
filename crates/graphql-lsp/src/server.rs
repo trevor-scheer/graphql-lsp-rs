@@ -40,13 +40,14 @@ impl GraphQLLanguageServer {
     }
 
     /// Load GraphQL config from a workspace folder
+    #[tracing::instrument(skip(self), fields(workspace_uri = %workspace_uri))]
     async fn load_workspace_config(&self, workspace_uri: &str, workspace_path: &PathBuf) {
-        tracing::info!("Loading GraphQL config from {:?}", workspace_path);
+        tracing::info!(path = ?workspace_path, "Loading GraphQL config");
 
         // Find graphql config
         match find_config(workspace_path) {
             Ok(Some(config_path)) => {
-                tracing::info!("Found GraphQL config at {:?}", config_path);
+                tracing::info!(config_path = ?config_path, "Found GraphQL config");
 
                 // Load the config
                 match load_config(&config_path) {
@@ -54,13 +55,15 @@ impl GraphQLLanguageServer {
                         // Create projects from config
                         match GraphQLProject::from_config_with_base(&config, workspace_path) {
                             Ok(projects) => {
-                                tracing::info!("Loaded {} GraphQL project(s)", projects.len());
+                                tracing::info!(count = projects.len(), "Loaded GraphQL projects");
 
                                 // Load schemas and documents for all projects
                                 for (name, project) in &projects {
                                     if let Err(e) = project.load_schema().await {
                                         tracing::error!(
-                                            "Failed to load schema for project '{name}': {e}"
+                                            project = %name,
+                                            error = %e,
+                                            "Failed to load schema"
                                         );
                                         self.client
                                             .log_message(
@@ -69,13 +72,15 @@ impl GraphQLLanguageServer {
                                             )
                                             .await;
                                     } else {
-                                        tracing::info!("Loaded schema for project '{}'", name);
+                                        tracing::info!(project = %name, "Loaded schema");
                                     }
 
                                     // Load documents to index all fragments
                                     if let Err(e) = project.load_documents() {
                                         tracing::error!(
-                                            "Failed to load documents for project '{name}': {e}"
+                                            project = %name,
+                                            error = %e,
+                                            "Failed to load documents"
                                         );
                                         self.client
                                             .log_message(
@@ -86,10 +91,10 @@ impl GraphQLLanguageServer {
                                     } else {
                                         let doc_index = project.get_document_index();
                                         tracing::info!(
-                                            "Loaded documents for project '{}': {} operations, {} fragments",
-                                            name,
-                                            doc_index.operations.len(),
-                                            doc_index.fragments.len()
+                                            project = %name,
+                                            operations = doc_index.operations.len(),
+                                            fragments = doc_index.fragments.len(),
+                                            "Loaded documents"
                                         );
                                     }
                                 }
@@ -256,12 +261,14 @@ impl GraphQLLanguageServer {
     }
 
     /// Validate a document and publish diagnostics
+    #[allow(clippy::too_many_lines)]
+    #[tracing::instrument(skip(self, content), fields(uri = ?uri))]
     async fn validate_document(&self, uri: Uri, content: &str) {
         let start = std::time::Instant::now();
-        tracing::debug!("Validating document: {:?}", uri);
+        tracing::debug!("Validating document");
 
         let Some((workspace_uri, project_idx)) = self.find_workspace_and_project(&uri) else {
-            tracing::warn!("No project found for document: {:?}", uri);
+            tracing::warn!("No project found for document");
             return;
         };
 
@@ -286,7 +293,7 @@ impl GraphQLLanguageServer {
             // Check if this is a schema file - schema files shouldn't be validated as executable documents
             if let Some(ref path) = file_path {
                 if project.is_schema_file(path.as_ref()) {
-                    tracing::debug!("Skipping validation for schema file: {:?}", uri);
+                    tracing::debug!("Skipping validation for schema file");
                     // Clear any existing diagnostics
                     self.client.publish_diagnostics(uri, vec![], None).await;
                     return;
@@ -384,10 +391,14 @@ impl GraphQLLanguageServer {
         });
 
         self.client
-            .publish_diagnostics(uri.clone(), diagnostics, None)
+            .publish_diagnostics(uri.clone(), diagnostics.clone(), None)
             .await;
 
-        tracing::debug!("Validated document {:?} in {:?}", uri, start.elapsed());
+        tracing::debug!(
+            elapsed_ms = start.elapsed().as_millis(),
+            diagnostic_count = diagnostics.len(),
+            "Validated document"
+        );
     }
 
     /// Get project-wide duplicate name diagnostics for a specific file
@@ -528,12 +539,13 @@ impl GraphQLLanguageServer {
 }
 
 impl LanguageServer for GraphQLLanguageServer {
+    #[tracing::instrument(skip(self, params))]
     async fn initialize(&self, params: InitializeParams) -> Result<InitializeResult> {
         tracing::info!("Initializing GraphQL Language Server");
 
         // Store workspace folders for later config loading
         if let Some(ref folders) = params.workspace_folders {
-            tracing::info!("Workspace folders: {} folders", folders.len());
+            tracing::info!(count = folders.len(), "Workspace folders");
             for folder in folders {
                 if let Some(path) = folder.uri.to_file_path() {
                     self.init_workspace_folders
@@ -588,10 +600,11 @@ impl LanguageServer for GraphQLLanguageServer {
         Ok(())
     }
 
+    #[tracing::instrument(skip(self, params), fields(uri = ?params.text_document.uri))]
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let uri = params.text_document.uri;
         let content = params.text_document.text;
-        tracing::info!("Document opened: {:?}", uri);
+        tracing::info!("Document opened");
 
         // Cache the document content
         self.document_cache.insert(uri.to_string(), content.clone());
@@ -599,10 +612,11 @@ impl LanguageServer for GraphQLLanguageServer {
         self.validate_document(uri, &content).await;
     }
 
+    #[tracing::instrument(skip(self, params), fields(uri = ?params.text_document.uri))]
     async fn did_change(&self, params: DidChangeTextDocumentParams) {
         let uri = params.text_document.uri;
         let start = std::time::Instant::now();
-        tracing::info!("Document changed: {:?}", uri);
+        tracing::info!("Document changed");
 
         // Get the latest content from changes (full sync mode)
         for change in params.content_changes {
@@ -626,14 +640,14 @@ impl LanguageServer for GraphQLLanguageServer {
         }
 
         tracing::info!(
-            "Completed did_change for {:?} in {:?}",
-            uri,
-            start.elapsed()
+            elapsed_ms = start.elapsed().as_millis(),
+            "Completed did_change"
         );
     }
 
+    #[tracing::instrument(skip(self, params), fields(uri = ?params.text_document.uri))]
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
-        tracing::info!("Document saved: {:?}", params.text_document.uri);
+        tracing::info!("Document saved");
         // Re-validation happens automatically through did_change
     }
 
