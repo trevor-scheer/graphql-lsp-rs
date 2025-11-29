@@ -1,267 +1,291 @@
-use crate::{Diagnostic, Position, Range, SchemaIndex};
-use apollo_parser::cst::CstNode;
-use apollo_parser::{cst, Parser};
-use std::collections::HashMap;
+use crate::{Diagnostic, DocumentIndex, Position, Range, SchemaIndex};
 
-use super::LintRule;
+use super::ProjectLintRule;
 
-/// Lint rule that checks for unique operation and fragment names
+/// Lint rule that checks for unique operation and fragment names across the entire project
 pub struct UniqueNamesRule;
 
-impl LintRule for UniqueNamesRule {
+impl ProjectLintRule for UniqueNamesRule {
     fn name(&self) -> &'static str {
         "unique_names"
     }
 
     fn description(&self) -> &'static str {
-        "Ensures operation and fragment names are unique within a document"
+        "Ensures operation and fragment names are unique across the entire project"
     }
 
-    fn check(
+    #[allow(clippy::too_many_lines)]
+    fn check_project(
         &self,
-        document: &str,
+        document_index: &DocumentIndex,
         _schema_index: &SchemaIndex,
-        _file_name: &str,
     ) -> Vec<Diagnostic> {
-        let mut errors = Vec::new();
-        let parser = Parser::new(document);
-        let tree = parser.parse();
-
-        // If there are syntax errors, we can't reliably check for duplicates
-        if tree.errors().len() > 0 {
-            return errors;
-        }
-
-        let doc_cst = tree.document();
-
-        // Track operation names and their locations
-        let mut operation_names: HashMap<String, Vec<(usize, usize)>> = HashMap::new();
-        // Track fragment names and their locations
-        let mut fragment_names: HashMap<String, Vec<(usize, usize)>> = HashMap::new();
-
-        // Walk through all definitions in the document
-        for definition in doc_cst.definitions() {
-            match definition {
-                cst::Definition::OperationDefinition(operation) => {
-                    if let Some(name) = operation.name() {
-                        let name_str = name.text().to_string();
-                        let syntax_node = name.syntax();
-                        let offset: usize = syntax_node.text_range().start().into();
-                        let line_col = offset_to_line_col(document, offset);
-
-                        operation_names.entry(name_str).or_default().push(line_col);
-                    }
-                }
-                cst::Definition::FragmentDefinition(fragment) => {
-                    if let Some(name) = fragment.fragment_name().and_then(|n| n.name()) {
-                        let name_str = name.text().to_string();
-                        let syntax_node = name.syntax();
-                        let offset: usize = syntax_node.text_range().start().into();
-                        let line_col = offset_to_line_col(document, offset);
-
-                        fragment_names.entry(name_str).or_default().push(line_col);
-                    }
-                }
-                _ => {}
-            }
-        }
+        let mut diagnostics = Vec::new();
 
         // Check for duplicate operation names
-        for (name, locations) in operation_names {
-            if locations.len() > 1 {
-                for (line, col) in locations {
+        for (name, operations) in &document_index.operations {
+            if operations.len() > 1 {
+                for op in operations {
+                    let message = format!(
+                        "Operation name '{}' is not unique across the project. Found {} definitions.",
+                        name,
+                        operations.len()
+                    );
+
                     let range = Range {
                         start: Position {
-                            line,
-                            character: col,
+                            line: op.line,
+                            character: op.column,
                         },
                         end: Position {
-                            line,
-                            character: col + name.len(),
+                            line: op.line,
+                            character: op.column + name.len(),
                         },
                     };
 
-                    let message = format!(
-                        "Operation name '{name}' is not unique. Operation names must be unique within a document."
-                    );
+                    let mut diag = Diagnostic::error(range, message)
+                        .with_code("unique_operation_names")
+                        .with_source("graphql-linter");
 
-                    errors.push(
-                        Diagnostic::error(range, message)
-                            .with_code("unique_operation_names")
-                            .with_source("graphql-linter"),
-                    );
+                    // Add related information for all other occurrences
+                    for other_op in operations {
+                        if other_op.file_path != op.file_path
+                            || other_op.line != op.line
+                            || other_op.column != op.column
+                        {
+                            use crate::diagnostics::{Location, RelatedInfo};
+                            let other_range = Range {
+                                start: Position {
+                                    line: other_op.line,
+                                    character: other_op.column,
+                                },
+                                end: Position {
+                                    line: other_op.line,
+                                    character: other_op.column + name.len(),
+                                },
+                            };
+                            let related = RelatedInfo {
+                                message: format!("Operation '{name}' also defined here"),
+                                location: Location {
+                                    uri: format!("file://{}", other_op.file_path),
+                                    range: other_range,
+                                },
+                            };
+                            diag = diag.with_related_info(related);
+                        }
+                    }
+
+                    diagnostics.push(diag);
                 }
             }
         }
 
         // Check for duplicate fragment names
-        for (name, locations) in fragment_names {
-            if locations.len() > 1 {
-                for (line, col) in locations {
+        for (name, fragments) in &document_index.fragments {
+            if fragments.len() > 1 {
+                for frag in fragments {
+                    let message = format!(
+                        "Fragment name '{}' is not unique across the project. Found {} definitions.",
+                        name,
+                        fragments.len()
+                    );
+
                     let range = Range {
                         start: Position {
-                            line,
-                            character: col,
+                            line: frag.line,
+                            character: frag.column,
                         },
                         end: Position {
-                            line,
-                            character: col + name.len(),
+                            line: frag.line,
+                            character: frag.column + name.len(),
                         },
                     };
 
-                    let message = format!(
-                        "Fragment name '{name}' is not unique. Fragment names must be unique within a document."
-                    );
+                    let mut diag = Diagnostic::error(range, message)
+                        .with_code("unique_fragment_names")
+                        .with_source("graphql-linter");
 
-                    errors.push(
-                        Diagnostic::error(range, message)
-                            .with_code("unique_fragment_names")
-                            .with_source("graphql-linter"),
-                    );
+                    // Add related information for all other occurrences
+                    for other_frag in fragments {
+                        if other_frag.file_path != frag.file_path
+                            || other_frag.line != frag.line
+                            || other_frag.column != frag.column
+                        {
+                            use crate::diagnostics::{Location, RelatedInfo};
+                            let other_range = Range {
+                                start: Position {
+                                    line: other_frag.line,
+                                    character: other_frag.column,
+                                },
+                                end: Position {
+                                    line: other_frag.line,
+                                    character: other_frag.column + name.len(),
+                                },
+                            };
+                            let related = RelatedInfo {
+                                message: format!("Fragment '{name}' also defined here"),
+                                location: Location {
+                                    uri: format!("file://{}", other_frag.file_path),
+                                    range: other_range,
+                                },
+                            };
+                            diag = diag.with_related_info(related);
+                        }
+                    }
+
+                    diagnostics.push(diag);
                 }
             }
         }
 
-        errors
+        diagnostics
     }
-}
-
-/// Convert a byte offset to a line and column (0-indexed)
-fn offset_to_line_col(document: &str, offset: usize) -> (usize, usize) {
-    let mut line = 0;
-    let mut col = 0;
-    let mut current_offset = 0;
-
-    for ch in document.chars() {
-        if current_offset >= offset {
-            break;
-        }
-
-        if ch == '\n' {
-            line += 1;
-            col = 0;
-        } else {
-            col += 1;
-        }
-
-        current_offset += ch.len_utf8();
-    }
-
-    (line, col)
 }
 
 #[cfg(test)]
 #[allow(clippy::needless_raw_string_hashes)]
 mod tests {
     use super::*;
+    use apollo_parser::{cst, Parser};
 
-    fn create_test_schema() -> SchemaIndex {
-        SchemaIndex::from_schema(
-            r"
-            type Query {
-                user(id: ID!): User
-            }
+    fn create_test_document_index(files: Vec<(&str, &str)>) -> DocumentIndex {
+        let mut index = DocumentIndex::new();
 
-            type User {
-                id: ID!
-                name: String!
+        for (file_path, content) in files {
+            let parser = Parser::new(content);
+            let tree = parser.parse();
+            let tree_arc = std::sync::Arc::new(tree);
+
+            // Cache the parsed AST
+            index
+                .parsed_asts
+                .insert(file_path.to_string(), tree_arc.clone());
+
+            // Index operations and fragments
+            let doc_cst = tree_arc.document();
+            for definition in doc_cst.definitions() {
+                match definition {
+                    cst::Definition::OperationDefinition(op_def) => {
+                        if let Some(name_node) = op_def.name() {
+                            let name = name_node.text().to_string();
+                            let op_type = if op_def
+                                .operation_type()
+                                .is_some_and(|t| t.mutation_token().is_some())
+                            {
+                                crate::OperationType::Mutation
+                            } else if op_def
+                                .operation_type()
+                                .is_some_and(|t| t.subscription_token().is_some())
+                            {
+                                crate::OperationType::Subscription
+                            } else {
+                                crate::OperationType::Query
+                            };
+
+                            let operation_info = crate::OperationInfo {
+                                name: Some(name.clone()),
+                                operation_type: op_type,
+                                file_path: file_path.to_string(),
+                                line: 0,
+                                column: 0,
+                            };
+
+                            index
+                                .operations
+                                .entry(name)
+                                .or_default()
+                                .push(operation_info);
+                        }
+                    }
+                    cst::Definition::FragmentDefinition(frag_def) => {
+                        if let Some(frag_name) = frag_def.fragment_name().and_then(|n| n.name()) {
+                            let name = frag_name.text().to_string();
+                            let type_condition = frag_def
+                                .type_condition()
+                                .and_then(|tc| tc.named_type())
+                                .and_then(|nt| nt.name())
+                                .map(|n| n.text().to_string())
+                                .unwrap_or_default();
+
+                            let fragment_info = crate::FragmentInfo {
+                                name: name.clone(),
+                                type_condition,
+                                file_path: file_path.to_string(),
+                                line: 0,
+                                column: 0,
+                            };
+
+                            index.fragments.entry(name).or_default().push(fragment_info);
+                        }
+                    }
+                    _ => {}
+                }
             }
-        ",
-        )
+        }
+
+        index
     }
 
     #[test]
-    fn test_duplicate_operation_names() {
+    fn test_detects_duplicate_operations_across_files() {
         let rule = UniqueNamesRule;
-        let schema = create_test_schema();
+        let schema = SchemaIndex::new();
 
-        let document = r#"
-            query GetUser($id: ID!) {
-                user(id: $id) {
-                    id
-                    name
-                }
-            }
+        let document_index = create_test_document_index(vec![
+            ("file1.graphql", r#"query GetUser { __typename }"#),
+            ("file2.graphql", r#"query GetUser { __typename }"#),
+        ]);
 
-            query GetUser($userId: ID!) {
-                user(id: $userId) {
-                    id
-                }
-            }
-        "#;
-
-        let diagnostics = rule.check(document, &schema, "test.graphql");
+        let diagnostics = rule.check_project(&document_index, &schema);
 
         assert_eq!(
             diagnostics.len(),
             2,
-            "Should have two errors (one for each duplicate)"
+            "Should have 2 errors for duplicate operation"
         );
-        assert!(diagnostics.iter().all(|e| e.message.contains("GetUser")));
-        assert!(diagnostics.iter().all(|e| e.message.contains("not unique")));
-        assert!(diagnostics
-            .iter()
-            .all(|e| e.severity == crate::Severity::Error));
+        assert!(diagnostics.iter().all(|d| d.message.contains("GetUser")));
+        assert!(diagnostics.iter().all(|d| d.message.contains("not unique")));
     }
 
     #[test]
-    fn test_duplicate_fragment_names() {
+    fn test_detects_duplicate_fragments_across_files() {
         let rule = UniqueNamesRule;
-        let schema = create_test_schema();
+        let schema = SchemaIndex::new();
 
-        let document = r#"
-            fragment UserFields on User {
-                id
-                name
-            }
+        let document_index = create_test_document_index(vec![
+            ("file1.graphql", r#"fragment UserFields on User { id }"#),
+            ("file2.graphql", r#"fragment UserFields on User { name }"#),
+        ]);
 
-            query GetUser($id: ID!) {
-                user(id: $id) {
-                    ...UserFields
-                }
-            }
-
-            fragment UserFields on User {
-                id
-            }
-        "#;
-
-        let diagnostics = rule.check(document, &schema, "test.graphql");
+        let diagnostics = rule.check_project(&document_index, &schema);
 
         assert_eq!(
             diagnostics.len(),
             2,
-            "Should have two errors (one for each duplicate)"
+            "Should have 2 errors for duplicate fragment"
         );
-        assert!(diagnostics.iter().all(|e| e.message.contains("UserFields")));
-        assert!(diagnostics.iter().all(|e| e.message.contains("not unique")));
+        assert!(diagnostics.iter().all(|d| d.message.contains("UserFields")));
+        assert!(diagnostics.iter().all(|d| d.message.contains("not unique")));
     }
 
     #[test]
-    fn test_unique_names_no_errors() {
+    fn test_no_errors_for_unique_names() {
         let rule = UniqueNamesRule;
-        let schema = create_test_schema();
+        let schema = SchemaIndex::new();
 
-        let document = r#"
-            fragment UserFields on User {
-                id
-                name
-            }
+        let document_index = create_test_document_index(vec![
+            (
+                "file1.graphql",
+                r#"query GetUser { __typename } fragment UserFields on User { id }"#,
+            ),
+            (
+                "file2.graphql",
+                r#"query GetPost { __typename } fragment PostFields on Post { id }"#,
+            ),
+        ]);
 
-            query GetUser($id: ID!) {
-                user(id: $id) {
-                    ...UserFields
-                }
-            }
+        let diagnostics = rule.check_project(&document_index, &schema);
 
-            query GetUsers {
-                user(id: "1") {
-                    ...UserFields
-                }
-            }
-        "#;
-
-        let diagnostics = rule.check(document, &schema, "test.graphql");
         assert_eq!(
             diagnostics.len(),
             0,
@@ -270,29 +294,19 @@ mod tests {
     }
 
     #[test]
-    fn test_anonymous_operations_dont_conflict() {
+    fn test_includes_related_info() {
         let rule = UniqueNamesRule;
-        let schema = create_test_schema();
+        let schema = SchemaIndex::new();
 
-        let document = r#"
-            {
-                user(id: "1") {
-                    id
-                }
-            }
+        let document_index = create_test_document_index(vec![
+            ("file1.graphql", r#"query GetUser { __typename }"#),
+            ("file2.graphql", r#"query GetUser { __typename }"#),
+        ]);
 
-            {
-                user(id: "2") {
-                    name
-                }
-            }
-        "#;
+        let diagnostics = rule.check_project(&document_index, &schema);
 
-        let diagnostics = rule.check(document, &schema, "test.graphql");
-        assert_eq!(
-            diagnostics.len(),
-            0,
-            "Anonymous operations should not conflict"
-        );
+        assert_eq!(diagnostics.len(), 2);
+        // Each diagnostic should have related info pointing to the other occurrence
+        assert!(diagnostics.iter().all(|d| !d.related_info.is_empty()));
     }
 }

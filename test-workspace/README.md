@@ -1,144 +1,204 @@
 # GraphQL LSP Test Workspace - Pokemon Edition
 
-A comprehensive test workspace for the GraphQL LSP implementation featuring a Pokemon-themed schema with realistic project structure.
+A fully configured TypeScript + GraphQL project for testing and developing the GraphQL LSP, featuring a Pokemon-themed schema with realistic project structure.
+
+## Quick Start
+
+```bash
+# Install dependencies
+npm install
+
+# Type check TypeScript
+npm run type-check
+
+# Validate GraphQL operations
+npm run graphql:validate
+# Or directly:
+../target/release/graphql validate
+```
 
 ## Project Structure
 
 ```
 test-workspace/
-├── schema.graphql              # Main Pokemon GraphQL schema
-├── graphql.config.yaml         # GraphQL configuration
+├── schema.graphql              # Pokemon GraphQL schema
+├── graphql.config.yaml         # GraphQL LSP configuration
+├── tsconfig.json              # TypeScript configuration
+├── package.json               # Dependencies (Apollo Client, GraphQL, React)
 └── src/
-    ├── fragments/              # Reusable GraphQL fragments
-    │   ├── pokemon.graphql     # Pokemon-related fragments
-    │   ├── trainer.graphql     # Trainer-related fragments
-    │   └── battle.graphql      # Battle-related fragments
-    ├── queries/                # Query operations
+    ├── components/            # React components with embedded GraphQL
+    │   ├── BattleViewer.tsx
+    │   ├── PokemonCard.tsx
+    │   └── TrainerProfile.tsx
+    ├── fragments/             # Reusable GraphQL fragments
+    │   ├── pokemon.graphql
+    │   ├── trainer.graphql
+    │   └── battle.graphql
+    ├── queries/              # GraphQL queries
     │   ├── pokemon-queries.graphql
     │   ├── trainer-queries.graphql
     │   ├── battle-queries.graphql
     │   └── misc-queries.graphql
-    ├── mutations/              # Mutation operations
+    ├── mutations/            # GraphQL mutations
     │   ├── trainer-mutations.graphql
     │   └── battle-mutations.graphql
-    ├── services/               # TypeScript services with embedded GraphQL
-    │   ├── pokemon-service.ts
-    │   ├── trainer-service.ts
-    │   └── battle-service.ts
-    ├── components/             # React components with GraphQL queries
-    │   ├── PokemonCard.tsx
-    │   ├── TrainerProfile.tsx
-    │   └── BattleViewer.tsx
-    └── types/
-        └── graphql-types.ts    # TypeScript type definitions
+    └── services/             # TypeScript services with embedded GraphQL
+        ├── pokemon-service.ts
+        ├── trainer-service.ts
+        └── battle-service.ts
 ```
+
+**Statistics**: 49 operations, 20 fragments across .graphql and .ts/.tsx files
+
+## GraphQL LSP Features Tested
+
+### Project-Wide Linting (NEW!)
+
+The workspace is configured with the new project-wide lint rules:
+
+- **`unique_names: error`** - Ensures operation and fragment names are unique across the **entire project**
+  - Checks all files, not just within a single document
+  - Provides rich diagnostics showing all duplicate locations
+
+- **`unused_fields: warn`** - Detects schema fields that are never used
+  - Analyzes all operations and fragments project-wide
+  - Helps identify dead code in your schema
+
+- **`deprecated_field: warn`** - Warns when using deprecated fields
+  - Per-document check for deprecated field usage
+
+### Validation
+
+- Schema validation with apollo-compiler
+- Query/mutation/subscription validation
+- Fragment validation and resolution across files
+- Type checking
+- Variable usage checking
+- Project-wide duplicate name detection
+
+### Language Features
+
+- **Go to Definition**: Fields, types, fragments, operations, variables, arguments
+- **Find References**: Find all usages across the project
+- **Hover**: Type information and descriptions
+- **Completion**: Context-aware completions
+- **Diagnostics**: Real-time error and warning reporting
+
+## Configuration
+
+GraphQL config in `graphql.config.yaml`:
+
+```yaml
+schema: schema.graphql
+documents: "**/*.{graphql,gql,ts,tsx,js,jsx}"
+extensions:
+  project:
+    lint:
+      recommended: error
+      unique_names: error      # Project-wide unique names
+      unused_fields: warn      # Detect unused schema fields
+      deprecated_field: warn   # Warn on deprecated field usage
+  extractConfig:
+    tagIdentifiers:
+      - gql
+      - graphql
+    requireImport: false  # Allow gql without import
+```
+
+## Testing the LSP
+
+### 1. Build the Project
+
+```bash
+# From project root
+cargo build --release
+```
+
+### 2. Validate GraphQL
+
+```bash
+# From test-workspace directory
+npm run graphql:validate
+```
+
+This runs validation and linting on all GraphQL operations.
+
+### 3. VSCode Extension
+
+Open this workspace in VSCode with the GraphQL LSP extension installed to test:
+- Real-time diagnostics
+- Go to definition
+- Find references
+- Hover information
+- Auto-completion
+
+### 4. Manual LSP Server
+
+```bash
+# From project root
+./target/release/graphql-lsp
+```
+
+## Example Operations
+
+The workspace includes comprehensive examples:
+
+### Pokemon Operations
+- Search by type, region, stats
+- Evolution chain queries
+- Detailed Pokemon info with fragments
+- Batch operations
+
+### Trainer Management
+- Trainer profiles with Pokemon teams
+- Badge collections
+- Trainer battles
+
+### Battle System
+- Battle creation and updates
+- Turn-by-turn battle logs
+- Battle history queries
+
+### Mutations
+- Create/update trainers
+- Add Pokemon to teams
+- Start/end battles
+- Award badges
 
 ## Schema Overview
 
-The Pokemon schema includes:
+The `schema.graphql` defines a comprehensive Pokemon API:
 
-- **Types**: Pokemon, Trainer, Battle, Item, Move, Ability
-- **Enums**: PokemonType, Region, TrainerClass, BattleStatus
-- **Unions**: EvolutionRequirement, BattleAction
-- **Operations**: Queries, Mutations, and Subscriptions
-- **Complexity**: Nested types, fragments, unions, and relationships
+- **Types**: Pokemon, Trainer, Battle, Stats, Moves, Abilities, Evolutions
+- **Queries**: Search, filters, pagination
+- **Mutations**: CRUD operations for trainers and battles
+- **Enums**: PokemonType, Region, BattleStatus, BattleOutcome
+- **Interfaces**: BattleAction, EvolutionRequirement
 
-## Testing the Extension
+## Dependencies
 
-### Option 1: From VS Code (Recommended)
-
-1. Open the `editors/vscode` directory in VS Code:
-   ```bash
-   cd /Users/trevor/Repositories/graphql-lsp/editors/vscode
-   code .
-   ```
-
-2. Press `F5` to launch the Extension Development Host
-
-3. In the new VS Code window that opens, open this test workspace:
-   ```
-   File > Open Folder > Select test-workspace
-   ```
-
-4. Test various LSP features:
-   - Open any `.graphql` file to see syntax highlighting
-   - Open `.ts` or `.tsx` files to test embedded GraphQL support
-   - Test fragment references (e.g., `...PokemonBasic` in queries)
-   - Test goto definition from fragment spreads
-   - Hover over types to see documentation
-   - Check diagnostics for validation errors
-
-### Option 2: Test the LSP Server Directly
-
-Run the validation CLI:
-
-```bash
-cd /Users/trevor/Repositories/graphql-lsp
-cargo build
-target/debug/graphql validate test-workspace/
+```json
+{
+  "dependencies": {
+    "@apollo/client": "^3.11.8",
+    "graphql": "^16.9.0",
+    "graphql-tag": "^2.12.6",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "typescript": "^5.7.2"
+  }
+}
 ```
 
-## What to Test
+## Development
 
-### Fragment References
-- Navigate from `...PokemonBasic` to its definition in [src/fragments/pokemon.graphql](src/fragments/pokemon.graphql)
-- Test cross-file fragment usage in queries and components
+This workspace serves as:
+1. **Test suite** for GraphQL LSP features
+2. **Example project** showing best practices
+3. **Development environment** for LSP work
+4. **Regression testing** for new features
 
-### Embedded GraphQL
-- Open [src/services/pokemon-service.ts](src/services/pokemon-service.ts) to test TypeScript support
-- Open [src/components/PokemonCard.tsx](src/components/PokemonCard.tsx) to test React components
-- Verify that GraphQL inside `gql` template literals is recognized
-
-### Validation
-- Schema validation across all files
-- Operation name uniqueness
-- Fragment name uniqueness
-- Type checking for fields and arguments
-
-### Hover & Documentation
-- Hover over Pokemon types to see descriptions
-- Hover over fields to see documentation strings
-- Check enum value descriptions
-
-## Key Features to Validate
-
-1. **Cross-file References**: Fragment usage across multiple files
-2. **Nested Fragments**: Fragments using other fragments
-3. **Union Types**: Battle actions with different types
-4. **Complex Queries**: Multi-level nested queries with variables
-5. **Embedded GraphQL**: GraphQL in TypeScript/JavaScript files
-6. **Subscriptions**: Real-time battle updates
-
-## Schema Highlights
-
-- **18 Pokemon Types**: Fire, Water, Electric, etc.
-- **9 Regions**: Kanto through Paldea
-- **Complex Evolution System**: Level, Item, Trade, and Friendship requirements
-- **Battle System**: Turn-based with multiple action types
-- **Trainer Management**: Teams, badges, and statistics
-
-## Adding New Test Cases
-
-To add new test cases:
-
-1. Create new `.graphql` files in appropriate directories
-2. Add TypeScript files with embedded GraphQL in `src/services/` or `src/components/`
-3. Reference existing fragments using `#import` or `...FragmentName`
-4. Run validation to ensure no errors
-
-## Common Test Scenarios
-
-1. **Fragment Spread Navigation**:
-   - Open [src/queries/pokemon-queries.graphql](src/queries/pokemon-queries.graphql:5)
-   - Click on `...PokemonWithEvolution` to jump to definition
-
-2. **Embedded GraphQL Validation**:
-   - Open [src/services/trainer-service.ts](src/services/trainer-service.ts)
-   - Verify no validation errors in `gql` blocks
-
-3. **Complex Nested Queries**:
-   - Open [src/components/BattleViewer.tsx](src/components/BattleViewer.tsx)
-   - Check inline fragments and nested selections
-
-4. **Subscription Support**:
-   - View [src/components/BattleViewer.tsx](src/components/BattleViewer.tsx:57) for subscription example
+When adding new LSP features, add corresponding test cases to this workspace!
