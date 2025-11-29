@@ -10,6 +10,8 @@ async fn main() {
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
         .with_ansi(false) // Disable ANSI colors since LSP output doesn't support them
+        .with_target(true) // Include module target in logs for better filtering
+        .with_thread_ids(true) // Include thread IDs for async debugging
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"))
