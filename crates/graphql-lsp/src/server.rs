@@ -406,6 +406,12 @@ impl GraphQLLanguageServer {
         file_path: &str,
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
+        // Check if unique_names lint is enabled
+        let lint_config = project.get_lint_config();
+        if !lint_config.is_enabled("unique_names") {
+            return Vec::new();
+        }
+
         // Get the document index
         let document_index = project.get_document_index();
 
