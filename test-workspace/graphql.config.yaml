@@ -3,4 +3,13 @@ schema: schema.graphql
 documents: "**/*.{graphql,gql,ts,tsx,js,jsx}"
 extensions:
   project:
-    lint: "recommended"
+    lint:
+      recommended: error
+      unique_names: error      # Project-wide unique operation/fragment names
+      unused_fields: warn      # Warn about schema fields never used
+      deprecated_field: warn   # Warn when using deprecated fields
+  extractConfig:
+    tagIdentifiers:
+      - gql
+      - graphql
+    requireImport: false

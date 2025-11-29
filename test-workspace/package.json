@@ -1,0 +1,27 @@
+{
+  "name": "graphql-lsp-test-workspace",
+  "version": "1.0.0",
+  "description": "Test workspace for GraphQL LSP development",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/**/*.ts",
+    "graphql:validate": "../target/debug/graphql validate"
+  },
+  "dependencies": {
+    "@apollo/client": "^3.11.8",
+    "graphql": "^16.9.0",
+    "graphql-tag": "^2.12.6",
+    "react": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/react": "^18.3.12",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "eslint": "^9.15.0",
+    "typescript": "^5.7.2"
+  }
+}

@@ -194,6 +194,19 @@ impl GraphQLProject {
         get_lint_config(&self.config)
     }
 
+    /// Run project-wide lint rules on all documents
+    ///
+    /// This runs lint rules that require analyzing the entire project, such as
+    /// detecting unused schema fields across all operations and fragments.
+    #[must_use]
+    pub fn lint_project(&self) -> Vec<Diagnostic> {
+        let linter = crate::Linter::new(self.get_lint_config());
+        let document_index = self.document_index.read().unwrap();
+        let schema_index = self.schema_index.read().unwrap();
+
+        linter.lint_project(&document_index, &schema_index)
+    }
+
     /// Update document index for a single file with in-memory content
     ///
     /// This removes all operations and fragments from the specified file path,

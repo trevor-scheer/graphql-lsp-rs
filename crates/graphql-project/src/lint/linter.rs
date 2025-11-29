@@ -1,4 +1,4 @@
-use crate::{Diagnostic, SchemaIndex, Severity};
+use crate::{Diagnostic, DocumentIndex, SchemaIndex, Severity};
 
 use super::config::{LintConfig, LintSeverity};
 use super::rules;
@@ -38,6 +38,46 @@ impl Linter {
 
             // Run the rule
             let mut rule_diagnostics = rule.check(document, schema_index, file_name);
+
+            // Apply configured severity
+            if let Some(severity) = self.config.get_severity(rule_name) {
+                for diag in &mut rule_diagnostics {
+                    diag.severity = match severity {
+                        LintSeverity::Error => Severity::Error,
+                        LintSeverity::Warn => Severity::Warning,
+                        LintSeverity::Off => unreachable!("Off rules are skipped"),
+                    };
+                }
+            }
+
+            diagnostics.extend(rule_diagnostics);
+        }
+
+        diagnostics
+    }
+
+    /// Run all enabled project-wide lints across all documents
+    #[must_use]
+    pub fn lint_project(
+        &self,
+        document_index: &DocumentIndex,
+        schema_index: &SchemaIndex,
+    ) -> Vec<Diagnostic> {
+        let mut diagnostics = Vec::new();
+
+        // Get all available project-wide rules
+        let all_project_rules = rules::all_project_rules();
+
+        for rule in all_project_rules {
+            let rule_name = rule.name();
+
+            // Skip if rule is not enabled (opt-in behavior)
+            if !self.config.is_enabled(rule_name) {
+                continue;
+            }
+
+            // Run the rule
+            let mut rule_diagnostics = rule.check_project(document_index, schema_index);
 
             // Apply configured severity
             if let Some(severity) = self.config.get_severity(rule_name) {
@@ -105,17 +145,9 @@ mod tests {
 
         let document = r#"
             query GetUser { user(id: "1") { id email } }
-            query GetUser { user(id: "2") { name } }
         "#;
 
         let diagnostics = linter.lint_document(document, &schema, "test.graphql");
-
-        // Should have 2 errors for duplicate operation names
-        let error_count = diagnostics
-            .iter()
-            .filter(|d| d.severity == Severity::Error)
-            .count();
-        assert_eq!(error_count, 2, "Should have 2 errors for duplicate names");
 
         // Should have 1 warning for deprecated field
         let warning_count = diagnostics
@@ -130,32 +162,27 @@ mod tests {
 
     #[test]
     fn test_linter_respects_custom_severity() {
-        let yaml = "\nunique_names: warn\ndeprecated_field: error\n";
+        let yaml = "\ndeprecated_field: error\n";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         let linter = Linter::new(config);
         let schema = create_test_schema();
 
         let document = r#"
             query GetUser { user(id: "1") { id email } }
-            query GetUser { user(id: "2") { name } }
         "#;
 
         let diagnostics = linter.lint_document(document, &schema, "test.graphql");
-
-        // Duplicate names should be warnings (custom config)
-        let duplicate_diags: Vec<_> = diagnostics
-            .iter()
-            .filter(|d| d.message.contains("not unique"))
-            .collect();
-        assert!(duplicate_diags
-            .iter()
-            .all(|d| d.severity == Severity::Warning));
 
         // Deprecated field should be error (custom config)
         let deprecated_diags: Vec<_> = diagnostics
             .iter()
             .filter(|d| d.message.contains("deprecated"))
             .collect();
+        assert_eq!(
+            deprecated_diags.len(),
+            1,
+            "Should have one deprecated warning"
+        );
         assert!(deprecated_diags
             .iter()
             .all(|d| d.severity == Severity::Error));
@@ -163,20 +190,22 @@ mod tests {
 
     #[test]
     fn test_linter_can_disable_specific_rules() {
-        let yaml = "\nunique_names: error\ndeprecated_field: off\n";
+        let yaml = "\ndeprecated_field: off\n";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         let linter = Linter::new(config);
         let schema = create_test_schema();
 
         let document = r#"
             query GetUser { user(id: "1") { id email } }
-            query GetUser { user(id: "2") { name } }
         "#;
 
         let diagnostics = linter.lint_document(document, &schema, "test.graphql");
 
-        // Should only have errors for duplicate names
-        assert!(diagnostics.iter().all(|d| d.message.contains("not unique")));
-        assert!(!diagnostics.iter().any(|d| d.message.contains("deprecated")));
+        // Should have no diagnostics since deprecated_field is disabled
+        assert_eq!(
+            diagnostics.len(),
+            0,
+            "Should have no diagnostics when rule is disabled"
+        );
     }
 }
