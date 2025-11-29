@@ -92,39 +92,6 @@ jobs:
           PRERELEASE_FLAG: ${{ needs.plan.outputs.is_prerelease == 'true' && '--prerelease' || '' }}
           TAG: ${{ needs.plan.outputs.tag }}
         run: |
-          # Create release notes
-          cat > $RUNNER_TEMP/notes.txt <<'EOF'
-# VSCode Extension Release
-
-This release includes the GraphQL LSP VSCode extension package.
-
-## Installation
-
-Download the `.vsix` file and install it in VS Code:
-
-### GUI Installation
-1. Open VS Code
-2. Go to Extensions view (Ctrl/Cmd+Shift+X)
-3. Click the "..." menu at the top
-4. Select "Install from VSIX..."
-5. Choose the downloaded `.vsix` file
-
-### CLI Installation
-```bash
-code --install-extension graphql-lsp-*.vsix
-```
-
-## What's Included
-
-- GraphQL language support with validation
-- Real-time error diagnostics
-- Go-to-definition for GraphQL elements
-- Find references across the project
-- Hover information for types and fields
-
-For more information, see the [main project repository](https://github.com/trevor-scheer/graphql-lsp).
-EOF
-
           # Create or update the release
           if gh release view "$TAG" > /dev/null 2>&1; then
             echo "Release $TAG already exists, uploading VSIX to existing release"
@@ -135,6 +102,6 @@ EOF
               --target "$GITHUB_SHA" \
               $PRERELEASE_FLAG \
               --title "GraphQL LSP VSCode Extension $TAG" \
-              --notes-file "$RUNNER_TEMP/notes.txt" \
+              --notes "VSCode Extension release for version $TAG. Download the .vsix file and install it in VS Code using the Extensions view menu or by running: code --install-extension graphql-lsp-*.vsix" \
               artifacts/*.vsix
           fi
