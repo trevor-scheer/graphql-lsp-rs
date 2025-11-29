@@ -24,7 +24,9 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - Run `cargo clippy` and address warnings
 - Ensure `cargo test` passes
 - Pre-commit hooks are set up via cargo-husky
-- For VSCode extension changes: run `npm run lint` (oxlint) in `editors/vscode/`
+- For VSCode extension changes:
+  - Run `npm run format:check` (prettier) in `editors/vscode/`
+  - Run `npm run lint` (oxlint) in `editors/vscode/`
 
 ## PR Guidelines
 
@@ -88,6 +90,8 @@ This is a GraphQL Language Server Protocol (LSP) implementation written in Rust.
 - `cargo clippy` - Lint checks
 - `cargo fmt` - Format code
 - `target/debug/graphql validate` - Run validation CLI
+- `cd editors/vscode && npm run format` - Format VSCode extension code
+- `cd editors/vscode && npm run format:check` - Check VSCode extension formatting
 - `cd editors/vscode && npm run lint` - Lint VSCode extension
 - `cd editors/vscode && npm run compile` - Build VSCode extension
 

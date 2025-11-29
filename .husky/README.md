@@ -16,4 +16,5 @@ To manually update the git hook after modifying `pre-commit.sh`, rebuild the pro
 
 ## Custom checks
 
-- **VSCode extension linting**: Runs `oxlint` on TypeScript files when staging changes to `editors/vscode/`
+- **VSCode extension formatting**: Runs `prettier --check` when staging changes to `editors/vscode/`
+- **VSCode extension linting**: Runs `oxlint` when staging changes to `editors/vscode/`

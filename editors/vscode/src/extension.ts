@@ -23,11 +23,7 @@ export async function activate(context: ExtensionContext) {
     const config = workspace.getConfiguration("graphql-lsp");
     const customPath = config.get<string>("serverPath");
 
-    const serverCommand = await findServerBinary(
-      context,
-      outputChannel,
-      customPath
-    );
+    const serverCommand = await findServerBinary(context, outputChannel, customPath);
     outputChannel.appendLine(`Using LSP server at: ${serverCommand}`);
 
     const run: Executable = {
@@ -55,9 +51,7 @@ export async function activate(context: ExtensionContext) {
         { scheme: "file", language: "javascriptreact" },
       ],
       synchronize: {
-        fileEvents: workspace.createFileSystemWatcher(
-          "**/*.{graphql,gql,ts,tsx,js,jsx}"
-        ),
+        fileEvents: workspace.createFileSystemWatcher("**/*.{graphql,gql,ts,tsx,js,jsx}"),
       },
       outputChannel: outputChannel,
     };

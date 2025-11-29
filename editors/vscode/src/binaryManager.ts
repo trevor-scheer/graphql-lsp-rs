@@ -56,10 +56,7 @@ function getPlatformInfo(): PlatformInfo {
 
 async function findInPath(binaryName: string): Promise<string | null> {
   try {
-    const cmd =
-      process.platform === "win32"
-        ? `where ${binaryName}`
-        : `which ${binaryName}`;
+    const cmd = process.platform === "win32" ? `where ${binaryName}` : `which ${binaryName}`;
     const { stdout } = await execAsync(cmd);
     const result = stdout.trim().split("\n")[0];
     return result || null;
@@ -68,10 +65,7 @@ async function findInPath(binaryName: string): Promise<string | null> {
   }
 }
 
-async function downloadBinary(
-  url: string,
-  destination: string
-): Promise<void> {
+async function downloadBinary(url: string, destination: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const file = fs.createWriteStream(destination);
     https
@@ -109,10 +103,7 @@ async function downloadBinary(
   });
 }
 
-async function extractTarXz(
-  archivePath: string,
-  extractDir: string
-): Promise<void> {
+async function extractTarXz(archivePath: string, extractDir: string): Promise<void> {
   const cmd =
     process.platform === "win32"
       ? `tar -xf "${archivePath}" -C "${extractDir}"`
@@ -120,10 +111,7 @@ async function extractTarXz(
   await execAsync(cmd);
 }
 
-async function extractZip(
-  archivePath: string,
-  extractDir: string
-): Promise<void> {
+async function extractZip(archivePath: string, extractDir: string): Promise<void> {
   const cmd =
     process.platform === "win32"
       ? `powershell -command "Expand-Archive -Path '${archivePath}' -DestinationPath '${extractDir}'"`
@@ -155,8 +143,7 @@ async function downloadAndInstallBinary(
 
   outputChannel.appendLine("Fetching latest release information...");
 
-  const releaseUrl =
-    "https://api.github.com/repos/trevor-scheer/graphql-lsp/releases/latest";
+  const releaseUrl = "https://api.github.com/repos/trevor-scheer/graphql-lsp/releases/latest";
 
   return new Promise((resolve, reject) => {
     https
@@ -215,10 +202,7 @@ async function downloadAndInstallBinary(
 
               if (fs.existsSync(extractedBinaryPath)) {
                 fs.renameSync(extractedBinaryPath, binaryPath);
-                const extractedDir = path.join(
-                  storageDir,
-                  `graphql-lsp-${platformInfo.platform}`
-                );
+                const extractedDir = path.join(storageDir, `graphql-lsp-${platformInfo.platform}`);
                 fs.rmSync(extractedDir, { recursive: true, force: true });
               } else {
                 throw new Error(`Binary not found after extraction`);
@@ -230,9 +214,7 @@ async function downloadAndInstallBinary(
 
               fs.unlinkSync(archivePath);
 
-              outputChannel.appendLine(
-                `Binary installed successfully at: ${binaryPath}`
-              );
+              outputChannel.appendLine(`Binary installed successfully at: ${binaryPath}`);
               resolve(binaryPath);
             } catch (error) {
               reject(error);
@@ -272,10 +254,7 @@ export async function findServerBinary(
 
   const platformInfo = getPlatformInfo();
 
-  const devPath = path.join(
-    context.extensionPath,
-    "../../target/debug/graphql-lsp"
-  );
+  const devPath = path.join(context.extensionPath, "../../target/debug/graphql-lsp");
   if (fs.existsSync(devPath)) {
     outputChannel.appendLine(`Found binary at dev path: ${devPath}`);
     return devPath;
@@ -289,26 +268,16 @@ export async function findServerBinary(
   }
 
   const storageDir = context.globalStorageUri.fsPath;
-  const storedBinaryPath = path.join(
-    storageDir,
-    "bin",
-    platformInfo.binaryName
-  );
+  const storedBinaryPath = path.join(storageDir, "bin", platformInfo.binaryName);
   if (fs.existsSync(storedBinaryPath)) {
     outputChannel.appendLine(`Found binary in storage: ${storedBinaryPath}`);
     return storedBinaryPath;
   }
 
-  outputChannel.appendLine(
-    "Binary not found, downloading from GitHub releases..."
-  );
+  outputChannel.appendLine("Binary not found, downloading from GitHub releases...");
 
   try {
-    const downloadedPath = await downloadAndInstallBinary(
-      context,
-      platformInfo,
-      outputChannel
-    );
+    const downloadedPath = await downloadAndInstallBinary(context, platformInfo, outputChannel);
     return downloadedPath;
   } catch (error) {
     throw new Error(

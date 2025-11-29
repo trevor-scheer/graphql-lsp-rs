@@ -202,6 +202,10 @@ jobs:
         working-directory: editors/vscode
         run: npm ci
 
+      - name: Check formatting
+        working-directory: editors/vscode
+        run: npm run format:check
+
       - name: Lint
         working-directory: editors/vscode
         run: npm run lint

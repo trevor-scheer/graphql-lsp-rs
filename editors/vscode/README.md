@@ -11,12 +11,14 @@ A VS Code extension that provides GraphQL language support with validation, comp
 ## Development Setup
 
 1. Build the LSP server:
+
    ```bash
    cd ../..
    cargo build --package graphql-lsp
    ```
 
 2. Install extension dependencies:
+
    ```bash
    cd editors/vscode
    npm install
@@ -24,6 +26,7 @@ A VS Code extension that provides GraphQL language support with validation, comp
    ```
 
 3. Set the path to the LSP server binary (optional):
+
    ```bash
    export GRAPHQL_LSP_PATH=/path/to/graphql-lsp/target/debug/graphql-lsp
    ```
@@ -40,7 +43,7 @@ A VS Code extension that provides GraphQL language support with validation, comp
      user(id: $id) {
        id
        name
-       invalidField  # This should show an error
+       invalidField # This should show an error
      }
    }
    ```

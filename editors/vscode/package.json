@@ -78,6 +78,8 @@
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
     "lint": "oxlint src",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "package": "vsce package"
   },
   "dependencies": {
@@ -88,6 +90,7 @@
     "@types/vscode": "^1.75.0",
     "@vscode/vsce": "^3.2.1",
     "oxlint": "^1.30.0",
+    "prettier": "^3.7.2",
     "typescript": "^5.0.0"
   }
 }
