@@ -209,11 +209,17 @@ async function downloadAndInstallBinary(
 
               const extractedBinaryPath = path.join(
                 storageDir,
+                `graphql-lsp-${platformInfo.platform}`,
                 platformInfo.binaryName
               );
 
               if (fs.existsSync(extractedBinaryPath)) {
                 fs.renameSync(extractedBinaryPath, binaryPath);
+                const extractedDir = path.join(
+                  storageDir,
+                  `graphql-lsp-${platformInfo.platform}`
+                );
+                fs.rmSync(extractedDir, { recursive: true, force: true });
               } else {
                 throw new Error(`Binary not found after extraction`);
               }
