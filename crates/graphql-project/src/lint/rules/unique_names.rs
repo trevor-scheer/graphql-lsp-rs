@@ -151,6 +151,7 @@ fn offset_to_line_col(document: &str, offset: usize) -> (usize, usize) {
 }
 
 #[cfg(test)]
+#[allow(clippy::needless_raw_string_hashes)]
 mod tests {
     use super::*;
 

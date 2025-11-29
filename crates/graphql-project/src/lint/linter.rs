@@ -111,30 +111,26 @@ mod tests {
         let diagnostics = linter.lint_document(document, &schema, "test.graphql");
 
         // Should have 2 errors for duplicate operation names
-        let errors: Vec<_> = diagnostics
+        let error_count = diagnostics
             .iter()
             .filter(|d| d.severity == Severity::Error)
-            .collect();
-        assert_eq!(errors.len(), 2, "Should have 2 errors for duplicate names");
+            .count();
+        assert_eq!(error_count, 2, "Should have 2 errors for duplicate names");
 
         // Should have 1 warning for deprecated field
-        let warnings: Vec<_> = diagnostics
+        let warning_count = diagnostics
             .iter()
             .filter(|d| d.severity == Severity::Warning)
-            .collect();
+            .count();
         assert_eq!(
-            warnings.len(),
-            1,
+            warning_count, 1,
             "Should have 1 warning for deprecated field"
         );
     }
 
     #[test]
     fn test_linter_respects_custom_severity() {
-        let yaml = r#"
-unique_names: warn
-deprecated_field: error
-"#;
+        let yaml = "\nunique_names: warn\ndeprecated_field: error\n";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         let linter = Linter::new(config);
         let schema = create_test_schema();
@@ -167,10 +163,7 @@ deprecated_field: error
 
     #[test]
     fn test_linter_can_disable_specific_rules() {
-        let yaml = r#"
-unique_names: error
-deprecated_field: off
-"#;
+        let yaml = "\nunique_names: error\ndeprecated_field: off\n";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         let linter = Linter::new(config);
         let schema = create_test_schema();

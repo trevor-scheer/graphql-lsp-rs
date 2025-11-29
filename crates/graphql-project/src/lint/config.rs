@@ -113,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_parse_recommended_string() {
-        let yaml = r#"recommended"#;
+        let yaml = r"recommended";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         assert!(matches!(config, LintConfig::Recommended(_)));
         assert!(config.is_enabled("unique_names"));
@@ -122,10 +122,7 @@ mod tests {
 
     #[test]
     fn test_parse_simple_rules() {
-        let yaml = r#"
-unique_names: error
-deprecated_field: off
-"#;
+        let yaml = "\nunique_names: error\ndeprecated_field: off\n";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         assert_eq!(
             config.get_severity("unique_names"),
@@ -140,10 +137,7 @@ deprecated_field: off
 
     #[test]
     fn test_parse_recommended_with_overrides() {
-        let yaml = r#"
-recommended: error
-deprecated_field: off
-"#;
+        let yaml = "\nrecommended: error\ndeprecated_field: off\n";
         let config: LintConfig = serde_yaml::from_str(yaml).unwrap();
         // Should have recommended rules enabled
         assert!(config.is_enabled("unique_names"));
