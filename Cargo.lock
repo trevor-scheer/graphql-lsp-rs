@@ -748,7 +748,7 @@ checksum = "0cc23270f6e1808e30a928bdc84dea0b9b4136a8bc82338574f23baf47bbd280"
 
 [[package]]
 name = "graphql-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -764,7 +764,7 @@ dependencies = [
 
 [[package]]
 name = "graphql-config"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "glob",
@@ -778,7 +778,7 @@ dependencies = [
 
 [[package]]
 name = "graphql-extract"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "glob",
  "swc_common",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "graphql-lsp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "apollo-compiler",
@@ -810,7 +810,7 @@ dependencies = [
 
 [[package]]
 name = "graphql-project"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "apollo-compiler",
