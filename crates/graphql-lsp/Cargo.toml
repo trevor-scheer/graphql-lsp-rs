@@ -6,6 +6,9 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[package.metadata.dist]
+dist = false
+
 [[bin]]
 name = "graphql-lsp"
 path = "src/main.rs"

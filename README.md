@@ -72,27 +72,86 @@ Command-line tool for validation and CI/CD integration.
 - `graphql validate` - Validate schema and documents
 - `graphql check` - Check for breaking changes (coming soon)
 
+## Installation
+
+### CLI Tool
+
+#### Install from Binary (Recommended)
+
+**macOS and Linux:**
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://github.com/trevor/graphql-lsp/releases/latest/download/graphql-cli-installer.ps1 | iex
+```
+
+#### Install from Source
+
+```bash
+cargo install --git https://github.com/trevor/graphql-lsp graphql-cli
+```
+
+#### Download Binary Directly
+
+Download the appropriate binary for your platform from the [releases page](https://github.com/trevor/graphql-lsp/releases):
+- macOS (Intel): `graphql-cli-x86_64-apple-darwin.tar.xz`
+- macOS (Apple Silicon): `graphql-cli-aarch64-apple-darwin.tar.xz`
+- Linux (x86_64): `graphql-cli-x86_64-unknown-linux-gnu.tar.xz`
+- Linux (ARM64): `graphql-cli-aarch64-unknown-linux-gnu.tar.xz`
+- Windows: `graphql-cli-x86_64-pc-windows-msvc.zip`
+
+### LSP Server
+
+The LSP server must be built from source:
+
+```bash
+cargo build -p graphql-lsp --release
+```
+
+The VSCode extension will automatically use the binary at `target/release/graphql-lsp` relative to the workspace root, or you can set the `GRAPHQL_LSP_PATH` environment variable to specify a custom location.
+
 ## Getting Started
 
-### Build
+### Using the CLI
+
+```bash
+# Validate your GraphQL project
+graphql validate
+
+# Validate with a specific config file
+graphql --config .graphqlrc.yml validate
+
+# Output as JSON for CI/CD
+graphql validate --format json
+
+# Watch mode for development
+graphql validate --watch
+```
+
+### Development
+
+#### Build
 
 ```bash
 cargo build --workspace
 ```
 
-### Run Tests
+#### Run Tests
 
 ```bash
 cargo test --workspace
 ```
 
-### Run CLI
+#### Run CLI from Source
 
 ```bash
 cargo run -p graphql-cli -- validate --help
 ```
 
-### Run LSP Server
+#### Run LSP Server
 
 ```bash
 cargo run -p graphql-lsp
