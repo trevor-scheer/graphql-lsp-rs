@@ -6,6 +6,7 @@ mod find_references;
 mod goto_definition;
 mod hover;
 mod index;
+mod lint;
 mod project;
 mod schema;
 mod validation;
@@ -22,6 +23,7 @@ pub use index::{
     DocumentIndex, ExtractedBlock, FieldDefinitionLocation, FragmentInfo, OperationInfo,
     OperationType, SchemaIndex, TypeInfo,
 };
+pub use lint::{LintConfig, LintRuleConfig, LintSeverity, Linter};
 pub use project::GraphQLProject;
 pub use schema::SchemaLoader;
 pub use validation::Validator;

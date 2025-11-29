@@ -406,11 +406,21 @@ impl GraphQLLanguageServer {
         file_path: &str,
         project: &GraphQLProject,
     ) -> Vec<Diagnostic> {
+        use graphql_project::LintSeverity;
+
+        // Check if unique_names lint is enabled and get its severity
+        let lint_config = project.get_lint_config();
+        let severity = match lint_config.get_severity("unique_names") {
+            Some(LintSeverity::Error) => graphql_project::Severity::Error,
+            Some(LintSeverity::Warn) => graphql_project::Severity::Warning,
+            Some(LintSeverity::Off) | None => return Vec::new(),
+        };
+
         // Get the document index
         let document_index = project.get_document_index();
 
-        // Check for duplicate names across the project
-        let duplicate_diagnostics = document_index.check_duplicate_names();
+        // Check for duplicate names across the project with the configured severity
+        let duplicate_diagnostics = document_index.check_duplicate_names(severity);
 
         // Filter to only diagnostics for this file and convert to LSP diagnostics
         duplicate_diagnostics
@@ -493,12 +503,37 @@ impl GraphQLLanguageServer {
             uri
         );
 
-        // Use the centralized validation logic from graphql-project
+        // Use the centralized validation logic from graphql-project (Apollo compiler)
         let file_path = uri.to_string();
-        let project_diagnostics = project.validate_extracted_documents(&extracted, &file_path);
+        let mut all_diagnostics = project.validate_extracted_documents(&extracted, &file_path);
+
+        // Run custom lints (if configured)
+        let lint_config = project.get_lint_config();
+        let linter = graphql_project::Linter::new(lint_config);
+        let schema_index = project.get_schema_index();
+
+        for block in &extracted {
+            let lint_diagnostics = linter.lint_document(&block.source, &schema_index, &file_path);
+
+            // Adjust positions for extracted blocks
+            for mut diag in lint_diagnostics {
+                diag.range.start.line += block.location.range.start.line;
+                diag.range.end.line += block.location.range.start.line;
+
+                // Adjust column only for first line
+                if diag.range.start.line == block.location.range.start.line {
+                    diag.range.start.character += block.location.range.start.column;
+                }
+                if diag.range.end.line == block.location.range.start.line {
+                    diag.range.end.character += block.location.range.start.column;
+                }
+
+                all_diagnostics.push(diag);
+            }
+        }
 
         // Convert graphql-project diagnostics to LSP diagnostics
-        project_diagnostics
+        all_diagnostics
             .into_iter()
             .map(|d| self.convert_project_diagnostic(d))
             .collect()

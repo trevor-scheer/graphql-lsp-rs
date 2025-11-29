@@ -37,12 +37,13 @@ Extracts GraphQL queries, mutations, and fragments from source files.
 - Magic comments (`/* GraphQL */`)
 
 ### graphql-project
-Core library providing validation, indexing, and diagnostics.
+Core library providing validation, indexing, diagnostics, and linting.
 
 **Features:**
 - Schema loading from files and URLs
 - Document loading and extraction
-- Validation engine
+- Apollo compiler validation engine
+- Configurable linting system with custom rules
 - Schema and document indexing
 - Diagnostic system
 
@@ -51,6 +52,7 @@ Language Server Protocol implementation for GraphQL.
 
 **Implemented Features:**
 - Real-time validation with project-wide diagnostics
+- Configurable linting with custom rules
 - Comprehensive go-to-definition support:
   - Fragment spreads, operations, types, fields
   - Variables, arguments, enum values
@@ -66,10 +68,11 @@ Language Server Protocol implementation for GraphQL.
 - Code actions
 
 ### graphql-cli
-Command-line tool for validation and CI/CD integration.
+Command-line tool for validation, linting, and CI/CD integration.
 
 **Commands:**
-- `graphql validate` - Validate schema and documents
+- `graphql validate` - Validate schema and documents (Apollo compiler validation)
+- `graphql lint` - Run custom lint rules with configurable severity
 - `graphql check` - Check for breaking changes (coming soon)
 
 ## Installation
@@ -137,17 +140,22 @@ The extension will automatically use `target/debug/graphql-lsp` when running fro
 ### Using the CLI
 
 ```bash
-# Validate your GraphQL project
+# Validate your GraphQL project (Apollo compiler validation)
 graphql validate
+
+# Run lints with configured rules
+graphql lint
 
 # Validate with a specific config file
 graphql --config .graphqlrc.yml validate
 
 # Output as JSON for CI/CD
 graphql validate --format json
+graphql lint --format json
 
 # Watch mode for development
 graphql validate --watch
+graphql lint --watch
 ```
 
 ### Development
@@ -203,6 +211,14 @@ cargo run -p graphql-lsp
 ```yaml
 schema: "schema.graphql"
 documents: "src/**/*.{graphql,ts,tsx}"
+extensions:
+  project:
+    lint:
+      # Enable recommended lints
+      recommended: error
+      # Override specific rules
+      deprecated_field: warn
+      unique_names: off
 ```
 
 Multi-project:
@@ -211,9 +227,52 @@ projects:
   frontend:
     schema: "https://api.example.com/graphql"
     documents: "frontend/**/*.ts"
+    extensions:
+      project:
+        lint:
+          recommended: error
   backend:
     schema: "backend/schema.graphql"
     documents: "backend/**/*.graphql"
+```
+
+### Lint Configuration
+
+Linting is opt-in and configured via the `extensions.project.lint` section:
+
+**Available rules:**
+- `unique_names` - Ensures operation and fragment names are unique (recommended: error)
+- `deprecated_field` - Warns when using fields marked with @deprecated (recommended: warn)
+
+**Severity levels:**
+- `off` - Disable the rule
+- `warn` - Show as warning
+- `error` - Show as error
+
+**Recommended preset:**
+```yaml
+extensions:
+  project:
+    lint:
+      recommended: error  # Enables all recommended rules
+```
+
+**Custom configuration:**
+```yaml
+extensions:
+  project:
+    lint:
+      unique_names: error
+      deprecated_field: warn
+```
+
+**Override recommended:**
+```yaml
+extensions:
+  project:
+    lint:
+      recommended: error
+      deprecated_field: off  # Disable specific rule
 ```
 
 ## License

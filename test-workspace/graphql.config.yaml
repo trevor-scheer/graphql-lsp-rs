@@ -1,2 +1,5 @@
 schema: schema.graphql
 documents: "**/*.{graphql,gql,ts,tsx,js,jsx}"
+extensions:
+  project:
+    lint: "recommended"

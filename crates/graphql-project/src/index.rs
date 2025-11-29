@@ -861,7 +861,10 @@ impl DocumentIndex {
     /// per occurrence at the actual file location
     #[must_use]
     #[allow(clippy::too_many_lines)]
-    pub fn check_duplicate_names(&self) -> Vec<(String, crate::Diagnostic)> {
+    pub fn check_duplicate_names(
+        &self,
+        severity: crate::Severity,
+    ) -> Vec<(String, crate::Diagnostic)> {
         use crate::{Diagnostic, Position, Range};
         let mut diagnostics = Vec::new();
 
@@ -887,9 +890,14 @@ impl DocumentIndex {
                         },
                     };
 
-                    let mut diag = Diagnostic::error(range, message)
-                        .with_code("unique-operation-names-project")
-                        .with_source("graphql-validator");
+                    let mut diag = match severity {
+                        crate::Severity::Error => Diagnostic::error(range, message),
+                        crate::Severity::Warning
+                        | crate::Severity::Information
+                        | crate::Severity::Hint => Diagnostic::warning(range, message),
+                    }
+                    .with_code("unique-operation-names-project")
+                    .with_source("graphql-validator");
 
                     // Add related information for all other occurrences
                     for other_op in operations {
@@ -946,9 +954,14 @@ impl DocumentIndex {
                         },
                     };
 
-                    let mut diag = Diagnostic::error(range, message)
-                        .with_code("unique-fragment-names-project")
-                        .with_source("graphql-validator");
+                    let mut diag = match severity {
+                        crate::Severity::Error => Diagnostic::error(range, message),
+                        crate::Severity::Warning
+                        | crate::Severity::Information
+                        | crate::Severity::Hint => Diagnostic::warning(range, message),
+                    }
+                    .with_code("unique-fragment-names-project")
+                    .with_source("graphql-validator");
 
                     // Add related information for all other occurrences
                     for other_frag in fragments {
@@ -1611,7 +1624,7 @@ type Query {
         assert_eq!(operations.len(), 2);
 
         // Verify duplicate detection works
-        let diagnostics = index.check_duplicate_names();
+        let diagnostics = index.check_duplicate_names(crate::Severity::Error);
         assert_eq!(
             diagnostics.len(),
             2,
@@ -1663,7 +1676,7 @@ type Query {
         assert_eq!(fragments.len(), 2);
 
         // Verify duplicate detection works
-        let diagnostics = index.check_duplicate_names();
+        let diagnostics = index.check_duplicate_names(crate::Severity::Error);
         assert_eq!(
             diagnostics.len(),
             2,
@@ -1728,7 +1741,7 @@ type Query {
         );
 
         // Verify no duplicates
-        let diagnostics = index.check_duplicate_names();
+        let diagnostics = index.check_duplicate_names(crate::Severity::Error);
         assert_eq!(
             diagnostics.len(),
             0,

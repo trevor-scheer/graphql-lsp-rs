@@ -26,6 +26,17 @@ fn get_extract_config(config: &ProjectConfig) -> ExtractConfig {
         .unwrap_or_default()
 }
 
+/// Extract `LintConfig` from `ProjectConfig` extensions
+fn get_lint_config(config: &ProjectConfig) -> crate::LintConfig {
+    config
+        .extensions
+        .as_ref()
+        .and_then(|ext| ext.get("project"))
+        .and_then(|value| value.get("lint"))
+        .and_then(|value| serde_json::from_value(value.clone()).ok())
+        .unwrap_or_default()
+}
+
 impl GraphQLProject {
     /// Create a new project from configuration
     #[must_use]
@@ -175,6 +186,12 @@ impl GraphQLProject {
     #[must_use]
     pub fn get_extract_config(&self) -> ExtractConfig {
         get_extract_config(&self.config)
+    }
+
+    /// Get the lint configuration for this project
+    #[must_use]
+    pub fn get_lint_config(&self) -> crate::LintConfig {
+        get_lint_config(&self.config)
     }
 
     /// Update document index for a single file with in-memory content

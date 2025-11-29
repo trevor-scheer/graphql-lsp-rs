@@ -22,13 +22,24 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Validate GraphQL schema and documents
+    /// Validate GraphQL schema and documents against GraphQL spec
     Validate {
         /// Output format
         #[arg(short, long, value_enum, default_value = "human")]
         format: OutputFormat,
 
         /// Watch mode - re-validate on file changes
+        #[arg(short, long)]
+        watch: bool,
+    },
+
+    /// Run custom lint rules on GraphQL documents
+    Lint {
+        /// Output format
+        #[arg(short, long, value_enum, default_value = "human")]
+        format: OutputFormat,
+
+        /// Watch mode - re-lint on file changes
         #[arg(short, long)]
         watch: bool,
     },
@@ -60,6 +71,9 @@ async fn main() -> anyhow::Result<()> {
     match cli.command {
         Commands::Validate { format, watch } => {
             commands::validate::run(cli.config, cli.project, format, watch).await?;
+        }
+        Commands::Lint { format, watch } => {
+            commands::lint::run(cli.config, cli.project, format, watch).await?;
         }
         Commands::Check { base, head } => {
             commands::check::run(cli.config, cli.project, base, head).await?;

@@ -42,3 +42,4 @@ tracing = "0.1"
 insta = { version = "1.44.1", features = ["yaml"] }
 tempfile = "3.0"
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+serde_yaml = { workspace = true }

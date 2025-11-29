@@ -58,9 +58,33 @@ Fast lookup structures ([src/index.rs](src/index.rs)):
 ### Validation
 
 GraphQL validation ([src/validation.rs](src/validation.rs)):
-- Validates documents against schema
-- Project-wide validation (unique operation/fragment names)
+- Validates documents against schema using apollo-compiler
+- Provides core GraphQL spec compliance checking
 - Converts apollo-compiler diagnostics to our format
+
+### Linting
+
+Configurable lint system ([src/lint/](src/lint/)):
+- **Linter** ([src/lint/linter.rs](src/lint/linter.rs)): Runs configured lint rules
+- **LintConfig** ([src/lint/config.rs](src/lint/config.rs)): Configuration for enabling/disabling rules with severity levels
+- **Rules** ([src/lint/rules/](src/lint/rules/)): Individual lint rule implementations
+  - `unique_names`: Ensures operation and fragment names are unique
+  - `deprecated_field`: Warns when using deprecated fields
+
+Linting is opt-in and configured via `.graphqlrc` or `graphql.config.yaml`:
+
+```yaml
+extensions:
+  project:
+    lint:
+      # Enable recommended preset
+      recommended: error
+      # Override specific rules
+      deprecated_field: warn
+      unique_names: off
+```
+
+Available severity levels: `off`, `warn`, `error`
 
 ### Language Features
 
@@ -89,8 +113,13 @@ let project_config = config.projects.get("my-project").unwrap();
 // Create project
 let project = GraphQLProject::new(project_config, "path/to/root").await?;
 
-// Validate all documents
+// Validate all documents (Apollo compiler validation only)
 let diagnostics = project.validate_all().await?;
+
+// Run lints
+let lint_config = project.get_lint_config();
+let linter = graphql_project::Linter::new(lint_config);
+let lint_diagnostics = linter.lint_document(document, &schema_index, file_name);
 ```
 
 ### Getting Language Features
@@ -140,7 +169,8 @@ Uses DashMap for concurrent access to project data, allowing:
 Key files to understand:
 - [src/project.rs](src/project.rs) - Main GraphQLProject implementation
 - [src/index.rs](src/index.rs) - Indexing structures
-- [src/validation.rs](src/validation.rs) - Validation logic
+- [src/validation.rs](src/validation.rs) - Apollo compiler validation logic
+- [src/lint/](src/lint/) - Configurable linting system
 - [src/goto_definition.rs](src/goto_definition.rs) - Goto definition implementation
 - [src/hover.rs](src/hover.rs) - Hover information
 
