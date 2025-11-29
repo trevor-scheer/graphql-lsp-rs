@@ -24,8 +24,9 @@ jobs:
     steps:
       - name: Check tag
         run: |
-          if [ -n "${{ !github.event.pull_request && github.ref_name || '' }}" ]; then
-            echo "Publishing VSCode extension for tag: ${{ github.ref_name }}"
+          TAG="${{ needs.plan.outputs.tag }}"
+          if [ -n "$TAG" ]; then
+            echo "Publishing VSCode extension for tag: $TAG"
           else
             echo "Dry run for PR"
           fi
