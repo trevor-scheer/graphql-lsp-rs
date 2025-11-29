@@ -160,13 +160,16 @@ pub async fn run(
             }
         }
 
+        // Get extract config from project
+        let extract_config = project.get_extract_config();
+
         // Validate each file using the centralized validation logic
         for file_path in all_file_paths {
             // Use graphql-extract to extract GraphQL from the file
             // This handles both .graphql files and embedded GraphQL in TypeScript/JavaScript
             let extracted = match graphql_extract::extract_from_file(
                 std::path::Path::new(file_path),
-                &graphql_extract::ExtractConfig::default(),
+                &extract_config,
             ) {
                 Ok(items) => items,
                 Err(e) => {

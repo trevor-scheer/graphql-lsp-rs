@@ -1,6 +1,5 @@
 use dashmap::DashMap;
 use graphql_config::{find_config, load_config};
-use graphql_extract::ExtractConfig;
 use graphql_project::GraphQLProject;
 use lsp_types::{
     CompletionOptions, CompletionParams, CompletionResponse, Diagnostic, DiagnosticSeverity,
@@ -474,14 +473,15 @@ impl GraphQLLanguageServer {
         };
 
         // Extract GraphQL from TypeScript/JavaScript
-        let extracted =
-            match graphql_extract::extract_from_file(temp_file.path(), &ExtractConfig::default()) {
-                Ok(extracted) => extracted,
-                Err(e) => {
-                    tracing::error!("Failed to extract GraphQL from {:?}: {}", uri, e);
-                    return vec![];
-                }
-            };
+        let extract_config = project.get_extract_config();
+        let extracted = match graphql_extract::extract_from_file(temp_file.path(), &extract_config)
+        {
+            Ok(extracted) => extracted,
+            Err(e) => {
+                tracing::error!("Failed to extract GraphQL from {:?}: {}", uri, e);
+                return vec![];
+            }
+        };
 
         if extracted.is_empty() {
             return vec![];
@@ -1002,17 +1002,19 @@ impl LanguageServer for GraphQLLanguageServer {
             } else {
                 // Fallback: Extract GraphQL from TypeScript file (cache miss)
                 tracing::debug!("Cache miss - extracting GraphQL from TypeScript file");
-                let extracted = match graphql_extract::extract_from_source(
-                    &content,
-                    language,
-                    &ExtractConfig::default(),
-                ) {
-                    Ok(extracted) => extracted,
-                    Err(e) => {
-                        tracing::debug!("Failed to extract GraphQL from TypeScript file: {}", e);
-                        return Ok(None);
-                    }
-                };
+                let extract_config = project.get_extract_config();
+                let extracted =
+                    match graphql_extract::extract_from_source(&content, language, &extract_config)
+                    {
+                        Ok(extracted) => extracted,
+                        Err(e) => {
+                            tracing::debug!(
+                                "Failed to extract GraphQL from TypeScript file: {}",
+                                e
+                            );
+                            return Ok(None);
+                        }
+                    };
 
                 for item in extracted {
                     let start_line = item.location.range.start.line;

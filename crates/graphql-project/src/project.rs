@@ -171,6 +171,12 @@ impl GraphQLProject {
         index.get_extracted_blocks(file_path).cloned()
     }
 
+    /// Get the extract configuration for this project
+    #[must_use]
+    pub fn get_extract_config(&self) -> ExtractConfig {
+        get_extract_config(&self.config)
+    }
+
     /// Update document index for a single file with in-memory content
     ///
     /// This removes all operations and fragments from the specified file path,
