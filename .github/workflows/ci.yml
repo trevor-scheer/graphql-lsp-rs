@@ -9,6 +9,10 @@ on:
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
       - 'rustfmt.toml'
+      - 'editors/vscode/**/*.ts'
+      - 'editors/vscode/package.json'
+      - 'editors/vscode/package-lock.json'
+      - 'editors/vscode/tsconfig.json'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -18,6 +22,10 @@ on:
       - 'Cargo.lock'
       - 'rust-toolchain.toml'
       - 'rustfmt.toml'
+      - 'editors/vscode/**/*.ts'
+      - 'editors/vscode/package.json'
+      - 'editors/vscode/package-lock.json'
+      - 'editors/vscode/tsconfig.json'
       - '.github/workflows/ci.yml'
 
 concurrency:
@@ -177,11 +185,44 @@ jobs:
       - name: Check workspace
         run: cargo check --workspace --all-features --verbose
 
+  vscode-extension:
+    name: VSCode Extension
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: editors/vscode/package-lock.json
+
+      - name: Install dependencies
+        working-directory: editors/vscode
+        run: npm ci
+
+      - name: Check formatting
+        working-directory: editors/vscode
+        run: npm run format:check
+
+      - name: Lint
+        working-directory: editors/vscode
+        run: npm run lint
+
+      - name: TypeScript type check
+        working-directory: editors/vscode
+        run: npx tsc --noEmit
+
+      - name: Build extension
+        working-directory: editors/vscode
+        run: npm run compile
+
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
     if: always()
-    needs: [test, lint, build, check]
+    needs: [test, lint, build, check, vscode-extension]
     steps:
       - name: Check all jobs
         run: |

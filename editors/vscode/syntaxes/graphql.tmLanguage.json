@@ -705,10 +705,7 @@
           "endCaptures": {
             "1": { "name": "meta.brace.curly.graphql" }
           },
-          "patterns": [
-            { "include": "#graphql-object-field" },
-            { "include": "#graphql-value" }
-          ]
+          "patterns": [{ "include": "#graphql-object-field" }, { "include": "#graphql-value" }]
         }
       ]
     },
