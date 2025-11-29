@@ -253,7 +253,27 @@ export async function findServerBinary(
     }
   }
 
+  const envPath = process.env.GRAPHQL_LSP_PATH;
+  if (envPath && envPath.trim() !== "") {
+    outputChannel.appendLine(`Checking GRAPHQL_LSP_PATH: ${envPath}`);
+    if (fs.existsSync(envPath)) {
+      outputChannel.appendLine(`Found binary at GRAPHQL_LSP_PATH: ${envPath}`);
+      return envPath;
+    } else {
+      outputChannel.appendLine(`GRAPHQL_LSP_PATH does not exist: ${envPath}`);
+    }
+  }
+
   const platformInfo = getPlatformInfo();
+
+  const devPath = path.join(
+    context.extensionPath,
+    "../../target/debug/graphql-lsp"
+  );
+  if (fs.existsSync(devPath)) {
+    outputChannel.appendLine(`Found binary at dev path: ${devPath}`);
+    return devPath;
+  }
 
   outputChannel.appendLine("Searching for graphql-lsp in PATH...");
   const pathBinary = await findInPath("graphql-lsp");
@@ -271,15 +291,6 @@ export async function findServerBinary(
   if (fs.existsSync(storedBinaryPath)) {
     outputChannel.appendLine(`Found binary in storage: ${storedBinaryPath}`);
     return storedBinaryPath;
-  }
-
-  const devPath = path.join(
-    context.extensionPath,
-    "../../target/debug/graphql-lsp"
-  );
-  if (fs.existsSync(devPath)) {
-    outputChannel.appendLine(`Found binary at dev path: ${devPath}`);
-    return devPath;
   }
 
   outputChannel.appendLine(
