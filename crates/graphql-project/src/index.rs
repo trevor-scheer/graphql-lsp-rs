@@ -750,6 +750,10 @@ pub struct DocumentIndex {
     /// Cached extracted GraphQL blocks from TypeScript/JavaScript files
     /// This eliminates the need to re-extract on every LSP request
     pub extracted_blocks: std::collections::HashMap<String, Vec<ExtractedBlock>>,
+
+    /// Cached line break indices for fast position<->offset conversion
+    /// Provides O(1) `position_to_offset` instead of O(N) character iteration
+    pub line_indices: std::collections::HashMap<String, std::sync::Arc<crate::LineIndex>>,
 }
 
 #[derive(Debug, Clone)]
@@ -853,6 +857,22 @@ impl DocumentIndex {
     /// Remove cached extracted blocks for a document
     pub fn remove_extracted_blocks(&mut self, file_path: &str) {
         self.extracted_blocks.remove(file_path);
+    }
+
+    /// Cache a line index for a document
+    pub fn cache_line_index(&mut self, file_path: String, index: std::sync::Arc<crate::LineIndex>) {
+        self.line_indices.insert(file_path, index);
+    }
+
+    /// Get a cached line index for a document
+    #[must_use]
+    pub fn get_line_index(&self, file_path: &str) -> Option<std::sync::Arc<crate::LineIndex>> {
+        self.line_indices.get(file_path).cloned()
+    }
+
+    /// Remove cached line index for a document
+    pub fn remove_line_index(&mut self, file_path: &str) {
+        self.line_indices.remove(file_path);
     }
 
     /// Check for duplicate operation and fragment names across the project

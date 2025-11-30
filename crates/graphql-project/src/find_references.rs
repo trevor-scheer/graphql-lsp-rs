@@ -55,14 +55,16 @@ impl FindReferencesProvider {
             include_declaration,
             None,
             None,
+            None,
         )
     }
 
-    /// Find all references with optional pre-parsed ASTs for optimization
+    /// Find all references with optional pre-parsed ASTs and file path for optimization
     ///
-    /// This method accepts optional cached ASTs to avoid re-parsing:
+    /// This method accepts optional cached data to avoid expensive operations:
     /// - `source_ast`: Pre-parsed AST of the source document
     /// - `document_asts`: Pre-parsed ASTs of all workspace documents (`file_path` -> AST)
+    /// - `file_path`: Source file path for accessing cached `LineIndex` (O(1) position conversion)
     #[must_use]
     #[allow(clippy::too_many_arguments)]
     #[allow(clippy::option_if_let_else)]
@@ -76,6 +78,7 @@ impl FindReferencesProvider {
         include_declaration: bool,
         source_ast: Option<&SyntaxTree>,
         document_asts: Option<&HashMap<String, SyntaxTree>>,
+        file_path: Option<&str>,
     ) -> Option<Vec<ReferenceLocation>> {
         tracing::info!(
             line = position.line,
@@ -100,7 +103,13 @@ impl FindReferencesProvider {
         }
 
         let doc = tree.document();
-        let byte_offset = Self::position_to_offset(source, position)?;
+
+        // Try to use cached LineIndex for O(1) position-to-offset conversion
+        // Fall back to O(N) character iteration if not available
+        let byte_offset = file_path
+            .and_then(|path| document_index.get_line_index(path))
+            .and_then(|line_index| Self::position_to_offset_with_index(&line_index, position))
+            .or_else(|| Self::position_to_offset(source, position))?;
         let element_type = Self::find_element_at_position(&doc, byte_offset, source, schema_index)?;
 
         tracing::debug!(element_type = ?element_type, "Finding references for element");
@@ -118,6 +127,20 @@ impl FindReferencesProvider {
         Some(references)
     }
 
+    /// Convert a line/column position to a byte offset using a cached `LineIndex`
+    ///
+    /// This is the fast path with O(1) complexity instead of O(N) character iteration.
+    fn position_to_offset_with_index(
+        line_index: &crate::LineIndex,
+        position: Position,
+    ) -> Option<usize> {
+        line_index.position_to_offset(position)
+    }
+
+    /// Convert a line/column position to a byte offset (fallback O(N) implementation)
+    ///
+    /// This is the slow path used when no cached `LineIndex` is available.
+    /// Prefers `position_to_offset_with_index` when possible.
     fn position_to_offset(source: &str, position: Position) -> Option<usize> {
         let mut current_line = 0;
         let mut current_col = 0;

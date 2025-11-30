@@ -5,7 +5,7 @@
 #![allow(clippy::single_match_else)]
 #![allow(clippy::only_used_in_recursion)]
 
-use crate::{Position, Range, SchemaIndex};
+use crate::{DocumentIndex, Position, Range, SchemaIndex};
 use apollo_parser::{
     cst::{self, CstNode},
     Parser,
@@ -83,10 +83,15 @@ impl HoverProvider {
         position: Position,
         schema_index: &SchemaIndex,
     ) -> Option<HoverInfo> {
-        self.hover_with_ast(source, position, schema_index, None)
+        self.hover_with_ast(source, position, schema_index, None, None, None)
     }
 
-    /// Get hover information with an optional cached AST
+    /// Get hover information with optional cached AST, document index, and file path
+    ///
+    /// This method accepts optional cached data to avoid expensive operations:
+    /// - `cached_ast`: Pre-parsed AST of the source document
+    /// - `document_index`: Document index for accessing cached `LineIndex`
+    /// - `file_path`: Source file path for O(1) position conversion
     #[must_use]
     #[allow(clippy::option_if_let_else)]
     pub fn hover_with_ast(
@@ -95,6 +100,8 @@ impl HoverProvider {
         position: Position,
         schema_index: &SchemaIndex,
         cached_ast: Option<&apollo_parser::SyntaxTree>,
+        document_index: Option<&DocumentIndex>,
+        file_path: Option<&str>,
     ) -> Option<HoverInfo> {
         let tree_holder;
         let tree = if let Some(ast) = cached_ast {
@@ -116,7 +123,13 @@ impl HoverProvider {
         }
 
         let doc = tree.document();
-        let byte_offset = Self::position_to_offset(source, position)?;
+
+        // Try to use cached LineIndex for O(1) position-to-offset conversion
+        // Fall back to O(N) character iteration if not available
+        let byte_offset = document_index
+            .and_then(|idx| file_path.and_then(|path| idx.get_line_index(path)))
+            .and_then(|line_index| Self::position_to_offset_with_index(&line_index, position))
+            .or_else(|| Self::position_to_offset(source, position))?;
 
         // Find the element at this position
         let element_type = Self::find_element_at_position(&doc, byte_offset, source, schema_index)?;
@@ -125,7 +138,20 @@ impl HoverProvider {
         Self::generate_hover_content(element_type, schema_index)
     }
 
-    /// Convert a line/column position to a byte offset
+    /// Convert a line/column position to a byte offset using a cached `LineIndex`
+    ///
+    /// This is the fast path with O(1) complexity instead of O(N) character iteration.
+    fn position_to_offset_with_index(
+        line_index: &crate::LineIndex,
+        position: Position,
+    ) -> Option<usize> {
+        line_index.position_to_offset(position)
+    }
+
+    /// Convert a line/column position to a byte offset (fallback O(N) implementation)
+    ///
+    /// This is the slow path used when no cached `LineIndex` is available.
+    /// Prefers `position_to_offset_with_index` when possible.
     fn position_to_offset(source: &str, position: Position) -> Option<usize> {
         let mut current_line = 0;
         let mut current_col = 0;

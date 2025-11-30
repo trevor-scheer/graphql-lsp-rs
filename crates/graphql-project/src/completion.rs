@@ -105,9 +105,14 @@ impl CompletionProvider {
         document_index: &DocumentIndex,
         schema_index: &SchemaIndex,
     ) -> Option<Vec<CompletionItem>> {
-        self.complete_with_ast(source, position, document_index, schema_index, None)
+        self.complete_with_ast(source, position, document_index, schema_index, None, None)
     }
 
+    /// Get completion suggestions with optional cached AST and file path
+    ///
+    /// This method accepts optional cached data to avoid expensive operations:
+    /// - `cached_ast`: Pre-parsed AST of the source document
+    /// - `file_path`: Source file path for accessing cached `LineIndex` (O(1) position conversion)
     #[must_use]
     #[allow(clippy::option_if_let_else)]
     pub fn complete_with_ast(
@@ -117,6 +122,7 @@ impl CompletionProvider {
         document_index: &DocumentIndex,
         schema_index: &SchemaIndex,
         cached_ast: Option<&apollo_parser::SyntaxTree>,
+        file_path: Option<&str>,
     ) -> Option<Vec<CompletionItem>> {
         let tree_holder;
         let tree = if let Some(ast) = cached_ast {
@@ -128,7 +134,13 @@ impl CompletionProvider {
         };
 
         let doc = tree.document();
-        let byte_offset = Self::position_to_offset(source, position)?;
+
+        // Try to use cached LineIndex for O(1) position-to-offset conversion
+        // Fall back to O(N) character iteration if not available
+        let byte_offset = file_path
+            .and_then(|path| document_index.get_line_index(path))
+            .and_then(|line_index| Self::position_to_offset_with_index(&line_index, position))
+            .or_else(|| Self::position_to_offset(source, position))?;
 
         let context = Self::determine_completion_context(&doc, byte_offset, source, schema_index)?;
 
@@ -139,6 +151,20 @@ impl CompletionProvider {
         ))
     }
 
+    /// Convert a line/column position to a byte offset using a cached `LineIndex`
+    ///
+    /// This is the fast path with O(1) complexity instead of O(N) character iteration.
+    fn position_to_offset_with_index(
+        line_index: &crate::LineIndex,
+        position: Position,
+    ) -> Option<usize> {
+        line_index.position_to_offset(position)
+    }
+
+    /// Convert a line/column position to a byte offset (fallback O(N) implementation)
+    ///
+    /// This is the slow path used when no cached `LineIndex` is available.
+    /// Prefers `position_to_offset_with_index` when possible.
     fn position_to_offset(source: &str, position: Position) -> Option<usize> {
         let mut current_line = 0;
         let mut current_col = 0;
