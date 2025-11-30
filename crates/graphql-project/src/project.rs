@@ -230,6 +230,7 @@ impl GraphQLProject {
             fragments: index.fragments.clone(),
             parsed_asts: index.parsed_asts.clone(),
             extracted_blocks: index.extracted_blocks.clone(),
+            line_indices: index.line_indices.clone(),
         }
     }
 
@@ -313,6 +314,10 @@ impl GraphQLProject {
 
             // Cache the parsed AST
             document_index.cache_ast(file_path.to_string(), parsed_arc);
+
+            // Build and cache line index for fast position<->offset conversion
+            let line_index = crate::LineIndex::new(content);
+            document_index.cache_line_index(file_path.to_string(), std::sync::Arc::new(line_index));
 
             // Cache extracted blocks with their parsed ASTs (Phase 3 optimization)
             let mut cached_blocks = Vec::new();

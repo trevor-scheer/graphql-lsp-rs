@@ -6,6 +6,7 @@ mod find_references;
 mod goto_definition;
 mod hover;
 mod index;
+mod line_index;
 mod lint;
 mod project;
 mod schema;
@@ -23,6 +24,7 @@ pub use index::{
     DocumentIndex, ExtractedBlock, FieldDefinitionLocation, FragmentInfo, OperationInfo,
     OperationType, SchemaIndex, TypeInfo,
 };
+pub use line_index::LineIndex;
 pub use lint::{LintConfig, LintRuleConfig, LintSeverity, Linter};
 pub use project::GraphQLProject;
 pub use schema::SchemaLoader;

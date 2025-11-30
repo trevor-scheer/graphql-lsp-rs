@@ -91,7 +91,14 @@ impl GotoDefinitionProvider {
         }
 
         let doc = tree.document();
-        let byte_offset = Self::position_to_offset(source, position);
+
+        // Try to use cached LineIndex for O(1) position-to-offset conversion
+        // Fall back to O(N) character iteration if not available
+        let byte_offset = document_index
+            .get_line_index(file_path)
+            .and_then(|line_index| Self::position_to_offset_with_index(&line_index, position))
+            .or_else(|| Self::position_to_offset(source, position));
+
         if byte_offset.is_none() {
             tracing::debug!("Could not convert position to offset");
             return None;
@@ -124,6 +131,11 @@ impl GotoDefinitionProvider {
     }
 
     /// Convert a line/column position to a byte offset
+    ///
+    /// # Performance Note
+    ///
+    /// This is a fallback implementation that uses O(N) character iteration.
+    /// Callers should prefer using a cached `LineIndex` when available for O(1) lookups.
     fn position_to_offset(source: &str, position: Position) -> Option<usize> {
         let mut current_line = 0;
         let mut current_col = 0;
@@ -149,6 +161,16 @@ impl GotoDefinitionProvider {
         } else {
             None
         }
+    }
+
+    /// Convert a line/column position to a byte offset using a cached `LineIndex`
+    ///
+    /// This is the fast path with O(1) complexity instead of O(N) character iteration.
+    fn position_to_offset_with_index(
+        line_index: &crate::LineIndex,
+        position: Position,
+    ) -> Option<usize> {
+        line_index.position_to_offset(position)
     }
 
     /// Find the GraphQL element at the given byte offset
