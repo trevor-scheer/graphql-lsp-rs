@@ -12,8 +12,17 @@ use lsp_types::{
 };
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
 use tower_lsp_server::jsonrpc::Result;
 use tower_lsp_server::{Client, LanguageServer, UriExt};
+
+/// Delay for deferred lint execution in milliseconds
+/// Lints run after this period of inactivity following a save
+const LINT_DEFER_MS: u64 = 1000;
+
+/// Type alias for lint task handle
+type LintTask = Arc<Mutex<Option<JoinHandle<()>>>>;
 
 pub struct GraphQLLanguageServer {
     client: Client,
@@ -25,6 +34,22 @@ pub struct GraphQLLanguageServer {
     projects: Arc<DashMap<String, Vec<(String, GraphQLProject)>>>,
     /// Document content cache indexed by URI string
     document_cache: Arc<DashMap<String, String>>,
+    /// Deferred lint tasks (workspace -> `JoinHandle`) for running expensive lints on idle
+    /// Each workspace can have at most one pending lint task
+    lint_tasks: Arc<DashMap<String, LintTask>>,
+}
+
+impl Clone for GraphQLLanguageServer {
+    fn clone(&self) -> Self {
+        Self {
+            client: self.client.clone(),
+            init_workspace_folders: Arc::clone(&self.init_workspace_folders),
+            workspace_roots: Arc::clone(&self.workspace_roots),
+            projects: Arc::clone(&self.projects),
+            document_cache: Arc::clone(&self.document_cache),
+            lint_tasks: Arc::clone(&self.lint_tasks),
+        }
+    }
 }
 
 impl GraphQLLanguageServer {
@@ -35,6 +60,7 @@ impl GraphQLLanguageServer {
             workspace_roots: Arc::new(DashMap::new()),
             projects: Arc::new(DashMap::new()),
             document_cache: Arc::new(DashMap::new()),
+            lint_tasks: Arc::new(DashMap::new()),
         }
     }
 
@@ -914,6 +940,80 @@ impl GraphQLLanguageServer {
             ..Default::default()
         }
     }
+
+    /// Schedule a deferred lint execution for the workspace containing the given URI.
+    ///
+    /// This method cancels any existing pending lint task for the workspace and schedules
+    /// a new one that will execute after `LINT_DEFER_MS` milliseconds of inactivity.
+    ///
+    /// This is useful for expensive workspace-wide operations like `lint_project()` which
+    /// scan all documents for unused fields. By deferring execution, we avoid blocking
+    /// file save operations and reduce redundant work when multiple files are saved rapidly.
+    async fn schedule_deferred_lint(&self, uri: Uri) {
+        // Find the workspace for this URI
+        let Some((workspace_uri, _project_idx)) = self.find_workspace_and_project(&uri) else {
+            tracing::warn!(uri = ?uri, "No workspace found for URI, skipping deferred lint");
+            return;
+        };
+
+        tracing::debug!(
+            workspace = %workspace_uri,
+            defer_ms = LINT_DEFER_MS,
+            "Scheduling deferred lint"
+        );
+
+        // Get or create task slot for this workspace
+        let task_slot = self
+            .lint_tasks
+            .entry(workspace_uri.clone())
+            .or_insert_with(|| Arc::new(Mutex::new(None)))
+            .clone();
+
+        // Cancel existing pending lint task if any
+        {
+            let mut task_guard = task_slot.lock().await;
+            if let Some(existing_task) = task_guard.take() {
+                tracing::debug!(workspace = %workspace_uri, "Cancelling pending lint task");
+                existing_task.abort();
+            }
+        }
+
+        // Clone necessary data for the async task
+        let server = self.clone();
+        let uri_for_task = uri.clone();
+        let workspace_uri_for_task = workspace_uri.clone();
+
+        // Spawn deferred lint task
+        let task = tokio::spawn(async move {
+            // Wait for the defer period
+            tokio::time::sleep(tokio::time::Duration::from_millis(LINT_DEFER_MS)).await;
+
+            tracing::info!(workspace = %workspace_uri_for_task, "Executing deferred lint");
+            let lint_start = std::time::Instant::now();
+
+            // Run the expensive workspace-wide lint operation
+            server.revalidate_schema_files(&uri_for_task).await;
+
+            tracing::debug!(
+                workspace = %workspace_uri_for_task,
+                duration_ms = lint_start.elapsed().as_millis(),
+                "Deferred lint completed"
+            );
+
+            // Clear the task slot
+            let task_slot = server.lint_tasks.get(&workspace_uri_for_task);
+            if let Some(task_slot) = task_slot {
+                let mut task_guard = task_slot.lock().await;
+                *task_guard = None;
+            }
+        });
+
+        // Store the task handle
+        {
+            let mut task_guard = task_slot.lock().await;
+            *task_guard = Some(task);
+        }
+    }
 }
 
 impl LanguageServer for GraphQLLanguageServer {
@@ -1030,17 +1130,12 @@ impl LanguageServer for GraphQLLanguageServer {
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         tracing::info!("Document saved");
 
-        // Re-validate schema files to update unused_fields warnings
-        // We do this on save (not on every keystroke) to avoid performance issues
+        // Schedule deferred schema file revalidation to update unused_fields warnings
+        // We defer this (1s after save) to avoid blocking the save operation
         // When field usage changes in operations/fragments, unused_fields diagnostics
-        // in schema files need to be updated
+        // in schema files need to be updated, but this doesn't need to be immediate
         let uri = params.text_document.uri;
-        let schema_revalidate_start = std::time::Instant::now();
-        self.revalidate_schema_files(&uri).await;
-        tracing::debug!(
-            "Schema revalidation took {:?}",
-            schema_revalidate_start.elapsed()
-        );
+        self.schedule_deferred_lint(uri).await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
