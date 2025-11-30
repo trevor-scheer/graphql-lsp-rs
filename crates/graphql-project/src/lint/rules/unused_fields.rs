@@ -53,15 +53,34 @@ impl ProjectLintRule for UnusedFieldsRule {
                 let is_used = used_in_type.is_some_and(|set| set.contains(&field_name));
 
                 if !is_used {
+                    // Get the location of the field definition in the schema
+                    let field_location =
+                        schema_index.find_field_definition(&type_name, &field_name);
+
                     // Create a diagnostic for this unused field
-                    // Since we don't have the schema source location here, we'll create
-                    // a diagnostic without a specific file location
                     let message = format!(
                         "Field '{type_name}.{field_name}' is defined in the schema but never used in any operation or fragment"
                     );
 
-                    diagnostics.push(
-                        Diagnostic::warning(
+                    let (range, file_path) = if let Some(location) = field_location {
+                        // Use actual field location from schema
+                        let field_name_len = field_name.len();
+                        (
+                            Range {
+                                start: Position {
+                                    line: location.line,
+                                    character: location.column,
+                                },
+                                end: Position {
+                                    line: location.line,
+                                    character: location.column + field_name_len,
+                                },
+                            },
+                            Some(location.file_path),
+                        )
+                    } else {
+                        // Fallback to zero position if we can't find the location
+                        (
                             Range {
                                 start: Position {
                                     line: 0,
@@ -72,10 +91,21 @@ impl ProjectLintRule for UnusedFieldsRule {
                                     character: 0,
                                 },
                             },
-                            message,
+                            None,
                         )
-                        .with_code("unused_field")
-                        .with_source("graphql-linter"),
+                    };
+
+                    // For now, we store the file path in the diagnostic source
+                    // This is a workaround until we update ProjectLintRule to return (file_path, Diagnostic) tuples
+                    let source = file_path.map_or_else(
+                        || "graphql-linter".to_string(),
+                        |path| format!("graphql-linter:{path}"),
+                    );
+
+                    diagnostics.push(
+                        Diagnostic::warning(range, message)
+                            .with_code("unused_field")
+                            .with_source(source),
                     );
                 }
             }
@@ -86,13 +116,14 @@ impl ProjectLintRule for UnusedFieldsRule {
 }
 
 /// Collect all fields used across all documents in the project
+#[allow(clippy::too_many_lines)]
 fn collect_all_used_fields(
     document_index: &DocumentIndex,
     schema_index: &SchemaIndex,
 ) -> HashMap<String, HashSet<String>> {
     let mut used_fields: HashMap<String, HashSet<String>> = HashMap::new();
 
-    // Process all parsed ASTs
+    // Process all parsed ASTs from pure GraphQL files
     for tree in document_index.parsed_asts.values() {
         if tree.errors().next().is_none() {
             let doc_cst = tree.document();
@@ -146,6 +177,70 @@ fn collect_all_used_fields(
                         }
                     }
                     _ => {}
+                }
+            }
+        }
+    }
+
+    // Process extracted GraphQL blocks from TypeScript/JavaScript files
+    for blocks in document_index.extracted_blocks.values() {
+        for block in blocks {
+            let tree = &block.parsed;
+            if tree.errors().next().is_none() {
+                let doc_cst = tree.document();
+                for definition in doc_cst.definitions() {
+                    match definition {
+                        cst::Definition::OperationDefinition(op_def) => {
+                            // Get the root type name for this operation
+                            let root_type_name = match op_def.operation_type() {
+                                Some(op_type) if op_type.query_token().is_some() => {
+                                    schema_index.schema().schema_definition.query.as_ref()
+                                }
+                                Some(op_type) if op_type.mutation_token().is_some() => {
+                                    schema_index.schema().schema_definition.mutation.as_ref()
+                                }
+                                Some(op_type) if op_type.subscription_token().is_some() => {
+                                    schema_index
+                                        .schema()
+                                        .schema_definition
+                                        .subscription
+                                        .as_ref()
+                                }
+                                None => schema_index.schema().schema_definition.query.as_ref(),
+                                _ => None,
+                            };
+
+                            if let Some(root_type_name) = root_type_name {
+                                if let Some(selection_set) = op_def.selection_set() {
+                                    collect_fields_from_selection_set(
+                                        &selection_set,
+                                        root_type_name.as_str(),
+                                        schema_index,
+                                        &mut used_fields,
+                                    );
+                                }
+                            }
+                        }
+                        cst::Definition::FragmentDefinition(frag_def) => {
+                            if let Some(type_condition) = frag_def.type_condition() {
+                                if let Some(type_name) = type_condition
+                                    .named_type()
+                                    .and_then(|nt| nt.name())
+                                    .map(|n| n.text().to_string())
+                                {
+                                    if let Some(selection_set) = frag_def.selection_set() {
+                                        collect_fields_from_selection_set(
+                                            &selection_set,
+                                            &type_name,
+                                            schema_index,
+                                            &mut used_fields,
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
             }
         }
