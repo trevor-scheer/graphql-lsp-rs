@@ -318,6 +318,77 @@ impl GraphQLLanguageServer {
         );
     }
 
+    /// Re-validate schema files when field usage changes in a document
+    ///
+    /// When operations or fragments change, the set of used fields changes,
+    /// which affects `unused_fields` diagnostics in schema files. This method
+    /// finds all schema files and re-publishes their diagnostics.
+    async fn revalidate_schema_files(&self, changed_uri: &Uri) {
+        let start = std::time::Instant::now();
+        tracing::debug!(
+            "Starting re-validation of schema files for: {:?}",
+            changed_uri
+        );
+
+        // Find the workspace and project for the changed document
+        let Some((workspace_uri, project_idx)) = self.find_workspace_and_project(changed_uri)
+        else {
+            tracing::debug!("No workspace found for URI: {:?}", changed_uri);
+            return;
+        };
+
+        // Get all schema files from the project config
+        let schema_files: Vec<String> = {
+            let Some(projects) = self.projects.get(&workspace_uri) else {
+                tracing::debug!("No projects loaded for workspace: {}", workspace_uri);
+                return;
+            };
+
+            let Some((_, project)) = projects.get(project_idx) else {
+                tracing::debug!(
+                    "Project index {} not found in workspace {}",
+                    project_idx,
+                    workspace_uri
+                );
+                return;
+            };
+
+            project.get_schema_file_paths()
+        };
+
+        tracing::debug!(
+            "Re-validating {} schema files after field usage change",
+            schema_files.len()
+        );
+
+        // Re-publish diagnostics for each schema file
+        for file_path in schema_files {
+            // Convert file path to URI
+            let Some(schema_uri) = Uri::from_file_path(&file_path) else {
+                tracing::warn!("Failed to convert schema file path to URI: {}", file_path);
+                continue;
+            };
+
+            // Get content from cache or read from disk
+            let content =
+                if let Some(cached_content) = self.document_cache.get(&schema_uri.to_string()) {
+                    cached_content.clone()
+                } else {
+                    // Schema file not open in editor, skip it
+                    // We only update diagnostics for open files
+                    continue;
+                };
+
+            // Re-validate the schema file (this will publish updated diagnostics)
+            self.validate_document(schema_uri, &content).await;
+        }
+
+        tracing::debug!(
+            "Completed re-validation of schema files in {:?}",
+            start.elapsed()
+        );
+    }
+
     /// Validate a document and publish diagnostics
     #[allow(clippy::too_many_lines)]
     #[tracing::instrument(skip(self, content), fields(uri = ?uri))]
@@ -379,9 +450,29 @@ impl GraphQLLanguageServer {
                 // to avoid deadlock when it tries to acquire a read lock on projects
                 drop(projects);
 
-                // Clear diagnostics for the schema file itself
+                // Publish project-wide lint diagnostics for the schema file
+                // This includes unused_fields warnings
+                let schema_diagnostics = {
+                    let Some(projects) = self.projects.get(&workspace_uri) else {
+                        tracing::warn!("No projects loaded for workspace: {workspace_uri}");
+                        return;
+                    };
+
+                    let Some((_, project)) = projects.get(project_idx) else {
+                        tracing::warn!(
+                            "Project index {project_idx} not found in workspace {workspace_uri}"
+                        );
+                        return;
+                    };
+
+                    file_path.as_ref().map_or_else(Vec::new, |path| {
+                        let file_path_str = path.display().to_string();
+                        self.get_project_wide_diagnostics(&file_path_str, project)
+                    })
+                };
+
                 self.client
-                    .publish_diagnostics(uri.clone(), vec![], None)
+                    .publish_diagnostics(uri.clone(), schema_diagnostics, None)
                     .await;
 
                 // After schema changes, we need to revalidate all open documents
@@ -498,7 +589,7 @@ impl GraphQLLanguageServer {
             .await;
     }
 
-    /// Get project-wide duplicate name diagnostics for a specific file
+    /// Get project-wide lint diagnostics for a specific file
     fn get_project_wide_diagnostics(
         &self,
         file_path: &str,
@@ -506,26 +597,62 @@ impl GraphQLLanguageServer {
     ) -> Vec<Diagnostic> {
         use graphql_project::LintSeverity;
 
-        // Check if unique_names lint is enabled and get its severity
+        let mut diagnostics = Vec::new();
+
+        // Get lint config
         let lint_config = project.get_lint_config();
-        let severity = match lint_config.get_severity("unique_names") {
-            Some(LintSeverity::Error) => graphql_project::Severity::Error,
-            Some(LintSeverity::Warn) => graphql_project::Severity::Warning,
-            Some(LintSeverity::Off) | None => return Vec::new(),
+
+        // Check if unique_names lint is enabled (for backwards compatibility with the old implementation)
+        let unique_names_severity = match lint_config.get_severity("unique_names") {
+            Some(LintSeverity::Error) => Some(graphql_project::Severity::Error),
+            Some(LintSeverity::Warn) => Some(graphql_project::Severity::Warning),
+            Some(LintSeverity::Off) | None => None,
         };
 
-        // Get the document index
-        let document_index = project.get_document_index();
+        if let Some(severity) = unique_names_severity {
+            // Get the document index
+            let document_index = project.get_document_index();
 
-        // Check for duplicate names across the project with the configured severity
-        let duplicate_diagnostics = document_index.check_duplicate_names(severity);
+            // Check for duplicate names across the project with the configured severity
+            let duplicate_diagnostics = document_index.check_duplicate_names(severity);
 
-        // Filter to only diagnostics for this file and convert to LSP diagnostics
-        duplicate_diagnostics
-            .into_iter()
-            .filter(|(path, _)| path == file_path)
-            .map(|(_, diag)| self.convert_project_diagnostic(diag))
-            .collect()
+            // Filter to only diagnostics for this file and convert to LSP diagnostics
+            diagnostics.extend(
+                duplicate_diagnostics
+                    .into_iter()
+                    .filter(|(path, _)| path == file_path)
+                    .map(|(_, diag)| self.convert_project_diagnostic(diag)),
+            );
+        }
+
+        // Run all project-wide lint rules (includes unique_names and unused_fields)
+        // Note: This will run unique_names again, but we deduplicate below
+        let project_diagnostics = project.lint_project();
+
+        // Add project-wide diagnostics that apply to this file
+        // Parse file path from diagnostic source field (format: "graphql-linter:path")
+        diagnostics.extend(project_diagnostics.into_iter().filter_map(|diag| {
+            // Extract file path from source field if present
+            let diag_file_path = if diag.source.starts_with("graphql-linter:") {
+                Some(diag.source.strip_prefix("graphql-linter:").unwrap())
+            } else {
+                None
+            };
+
+            // Only include diagnostics that:
+            // 1. Have a file path that matches the current file, OR
+            // 2. Have meaningful positions (for backwards compatibility)
+            let matches_file = diag_file_path.is_some_and(|path| path == file_path);
+            let has_position = diag.range.start.line > 0 || diag.range.start.character > 0;
+
+            if matches_file || (diag_file_path.is_none() && has_position) {
+                Some(self.convert_project_diagnostic(diag))
+            } else {
+                None
+            }
+        }));
+
+        diagnostics
     }
 
     /// Refresh diagnostics for all files affected by duplicate name changes
@@ -882,6 +1009,9 @@ impl LanguageServer for GraphQLLanguageServer {
             // Re-validate all fragment definition files to update unused fragment warnings
             // This ensures that when fragment usage changes in one file, warnings in
             // fragment files are immediately updated
+            // Note: Fragment revalidation happens on change (not save) because it's fast
+            // and provides immediate feedback. Schema revalidation happens on save (see did_save)
+            // because lint_project() is expensive and would slow down typing.
             let revalidate_start = std::time::Instant::now();
             self.revalidate_fragment_files(&uri).await;
             tracing::debug!(
@@ -899,7 +1029,18 @@ impl LanguageServer for GraphQLLanguageServer {
     #[tracing::instrument(skip(self, params), fields(uri = ?params.text_document.uri))]
     async fn did_save(&self, params: DidSaveTextDocumentParams) {
         tracing::info!("Document saved");
-        // Re-validation happens automatically through did_change
+
+        // Re-validate schema files to update unused_fields warnings
+        // We do this on save (not on every keystroke) to avoid performance issues
+        // When field usage changes in operations/fragments, unused_fields diagnostics
+        // in schema files need to be updated
+        let uri = params.text_document.uri;
+        let schema_revalidate_start = std::time::Instant::now();
+        self.revalidate_schema_files(&uri).await;
+        tracing::debug!(
+            "Schema revalidation took {:?}",
+            schema_revalidate_start.elapsed()
+        );
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {

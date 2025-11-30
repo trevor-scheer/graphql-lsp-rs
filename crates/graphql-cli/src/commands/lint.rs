@@ -211,6 +211,46 @@ pub async fn run(
             }
         }
 
+        // Run project-wide lint rules (e.g., unused_fields, unique_names)
+        let project_diagnostics = project.lint_project();
+        for diag in project_diagnostics {
+            // Extract file path from diagnostic source field (format: "graphql-linter:path")
+            let file_path = if diag.source.starts_with("graphql-linter:") {
+                diag.source
+                    .strip_prefix("graphql-linter:")
+                    .unwrap()
+                    .to_string()
+            } else {
+                "(project)".to_string()
+            };
+
+            let diag_output = DiagnosticOutput {
+                file_path,
+                // Convert from 0-indexed to 1-indexed for display
+                line: diag.range.start.line + 1,
+                column: diag.range.start.character + 1,
+                end_line: diag.range.end.line + 1,
+                end_column: diag.range.end.character + 1,
+                message: diag.message,
+                severity: match diag.severity {
+                    Severity::Error => "error".to_string(),
+                    Severity::Warning => "warning".to_string(),
+                    Severity::Information => "info".to_string(),
+                    Severity::Hint => "hint".to_string(),
+                },
+                rule: diag.code.clone(),
+            };
+
+            match diag.severity {
+                Severity::Warning | Severity::Information | Severity::Hint => {
+                    all_warnings.push(diag_output);
+                }
+                Severity::Error => {
+                    all_errors.push(diag_output);
+                }
+            }
+        }
+
         // Display results
         total_warnings = all_warnings.len();
         total_errors = all_errors.len();

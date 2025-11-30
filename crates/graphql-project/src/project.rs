@@ -1278,6 +1278,41 @@ impl GraphQLProject {
 
         false
     }
+
+    /// Get all schema file paths for this project
+    ///
+    /// Returns a list of all schema files that match the project's schema patterns.
+    /// This is used by the LSP to find schema files that need to be revalidated.
+    #[must_use]
+    pub fn get_schema_file_paths(&self) -> Vec<String> {
+        let schema_patterns = self.config.schema.paths();
+        let mut schema_files = Vec::new();
+
+        for pattern_str in schema_patterns {
+            // Skip remote schemas (http/https URLs)
+            if pattern_str.starts_with("http://") || pattern_str.starts_with("https://") {
+                continue;
+            }
+
+            // Resolve pattern to absolute path if we have a base_dir
+            let pattern_to_glob = self.base_dir.as_ref().map_or_else(
+                || pattern_str.to_string(),
+                |base| {
+                    let normalized_pattern = pattern_str.strip_prefix("./").unwrap_or(pattern_str);
+                    base.join(normalized_pattern).display().to_string()
+                },
+            );
+
+            // Use glob to find matching files
+            if let Ok(paths) = glob::glob(&pattern_to_glob) {
+                for entry in paths.flatten() {
+                    schema_files.push(entry.display().to_string());
+                }
+            }
+        }
+
+        schema_files
+    }
 }
 
 #[cfg(test)]
